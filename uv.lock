@@ -467,6 +467,7 @@ dependencies = [
     { name = "sentence-transformers" },
     { name = "sqlalchemy" },
     { name = "tabulate" },
+    { name = "tiktoken" },
     { name = "unstructured" },
     { name = "uvicorn" },
 ]
@@ -498,6 +499,7 @@ requires-dist = [
     { name = "sentence-transformers", specifier = ">=3.0.0" },
     { name = "sqlalchemy", specifier = ">=2.0.36" },
     { name = "tabulate" },
+    { name = "tiktoken", specifier = ">=0.8.0" },
     { name = "unstructured" },
     { name = "uvicorn", specifier = ">=0.30.0" },
 ]

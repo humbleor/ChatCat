@@ -102,7 +102,7 @@ async def get_session_messages(session_id: str, current_user: User = Depends(get
             MessageInfo(
                 type=msg["type"],
                 content=msg["content"],
-                timestamp=msg["timestamp"],
+                timestamp=msg.get("timestamp", ""),
                 rag_trace=msg.get("rag_trace"),
             )
             for msg in storage.get_session_messages(current_user.username, session_id)

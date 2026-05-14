@@ -1,5 +1,6 @@
 from typing import Optional
 import os
+import contextvars
 import requests
 from dotenv import load_dotenv
 from langchain_core.tools import tool
@@ -9,61 +10,81 @@ load_dotenv()
 AMAP_WEATHER_API = os.getenv("AMAP_WEATHER_API")
 AMAP_API_KEY = os.getenv("AMAP_API_KEY")
 
-_LAST_RAG_CONTEXT = None
-_KNOWLEDGE_TOOL_CALLS_THIS_TURN = 0
-_RAG_STEP_QUEUE = None  # asyncio.Queue, set by agent before streaming
-_RAG_STEP_LOOP = None   # asyncio loop, captured when setting queue
+# Per-request state — 优先用 contextvars（同线程零开销），
+# 同时维护模块级全局变量作为线程池跨线程访问的 fallback。
+# contextvars 从主线程复制到线程池后，子线程能读但不能写回主线程，
+# 因此 _last_rag_context 必须以全局变量为主存储。
+_last_rag_context: contextvars.ContextVar = contextvars.ContextVar("last_rag_context", default=None)
+_knowledge_tool_calls: contextvars.ContextVar = contextvars.ContextVar("knowledge_tool_calls", default=0)
+_rag_step_queue: contextvars.ContextVar = contextvars.ContextVar("rag_step_queue", default=None)
+_rag_step_loop: contextvars.ContextVar = contextvars.ContextVar("rag_step_loop", default=None)
+
+# 模块级 fallback，供线程池线程写入后主线程读取
+_global_rag_context: Optional[dict] = None
+_global_rag_queue: Optional[object] = None
+_global_rag_loop: Optional[object] = None
 
 
 def _set_last_rag_context(context: dict):
-    global _LAST_RAG_CONTEXT
-    _LAST_RAG_CONTEXT = context
+    global _global_rag_context
+    _last_rag_context.set(context)
+    _global_rag_context = context
 
 
 def get_last_rag_context(clear: bool = True) -> Optional[dict]:
     """获取最近一次 RAG 检索上下文，默认读取后清空。"""
-    global _LAST_RAG_CONTEXT
-    context = _LAST_RAG_CONTEXT
+    global _global_rag_context
+    ctx = _last_rag_context.get() or _global_rag_context
     if clear:
-        _LAST_RAG_CONTEXT = None
-    return context
+        _last_rag_context.set(None)
+        _global_rag_context = None
+    return ctx
 
 
 def reset_tool_call_guards():
     """每轮对话开始时重置工具调用计数。"""
-    global _KNOWLEDGE_TOOL_CALLS_THIS_TURN
-    _KNOWLEDGE_TOOL_CALLS_THIS_TURN = 0
+    _knowledge_tool_calls.set(0)
 
 
 def set_rag_step_queue(queue):
-    """设置 RAG 步骤队列，并捕获当前事件循环以便跨线程调度。"""
-    global _RAG_STEP_QUEUE, _RAG_STEP_LOOP
-    _RAG_STEP_QUEUE = queue
+    """设置 RAG 步骤队列及其事件循环。"""
+    global _global_rag_queue, _global_rag_loop
+    _rag_step_queue.set(queue)
+    _global_rag_queue = queue
     if queue:
         import asyncio
         try:
-            _RAG_STEP_LOOP = asyncio.get_running_loop()
+            loop = asyncio.get_running_loop()
         except RuntimeError:
-            _RAG_STEP_LOOP = asyncio.get_event_loop()
+            loop = asyncio.get_event_loop()
+        _rag_step_loop.set(loop)
+        _global_rag_loop = loop
     else:
-        _RAG_STEP_LOOP = None
+        _rag_step_loop.set(None)
+        _global_rag_loop = None
 
 
 def emit_rag_step(icon: str, label: str, detail: str = ""):
-    """向队列发送一个 RAG 检索步骤。支持跨线程安全调用。"""
-    global _RAG_STEP_QUEUE, _RAG_STEP_LOOP
-    if _RAG_STEP_QUEUE is not None and _RAG_STEP_LOOP is not None:
+    """向当前请求的输出队列发送一个 RAG 检索步骤。
+
+    优先从 contextvars 读取队列和事件循环（同线程），失败时回退到
+    模块级全局变量（跨线程）。当两者均不可用时静默跳过。
+    """
+    queue = _rag_step_queue.get() or _global_rag_queue
+    loop = _rag_step_loop.get() or _global_rag_loop
+    if queue is not None and loop is not None:
         step = {"icon": icon, "label": label, "detail": detail}
         try:
-            if not _RAG_STEP_LOOP.is_closed():
-                _RAG_STEP_LOOP.call_soon_threadsafe(_RAG_STEP_QUEUE.put_nowait, step)
+            if not loop.is_closed():
+                loop.call_soon_threadsafe(queue.put_nowait, step)
         except Exception:
             pass
 
 
 @tool("get_current_weather")
 def get_current_weather(location: str, extensions: Optional[str] = "base") -> str:
-    """获取指定城市的天气信息。location 为城市名（如"武汉"或"420100"）。"""
+    """获取指定城市的天气信息。location 为城市名（如"武汉"或"420100"）。
+    extensions: "base" 仅返回实时天气，"all" 返回未来多日天气预报。用户询问未来天气时必须使用 extensions="all"。"""
     if not location:
         return "location参数不能为空"
     if extensions not in ("base", "all"):
@@ -106,13 +127,19 @@ def get_current_weather(location: str, extensions: Optional[str] = "base") -> st
             return f"未查询到 {location} 的天气预报数据"
         f0 = forecasts[0]
         out = [f"【{f0.get('city', location)} 天气预报】", f"更新时间：{f0.get('reporttime', '未知')}", ""]
-        today = (f0.get("casts") or [])[0] if f0.get("casts") else {}
-        out += [
-            "今日天气：",
-            f"  白天：{today.get('dayweather','未知')}",
-            f"  夜间：{today.get('nightweather','未知')}",
-            f"  气温：{today.get('nighttemp','未知')}~{today.get('daytemp','未知')}℃",
-        ]
+        casts = f0.get("casts") or []
+        if not casts:
+            return f"未查询到 {location} 的天气预报数据"
+        for i, day in enumerate(casts):
+            label = "今日天气" if i == 0 else f"未来第{i}天 ({day.get('date','')})"
+            out += [
+                f"{label}：",
+                f"  白天：{day.get('dayweather','未知')}",
+                f"  夜间：{day.get('nightweather','未知')}",
+                f"  气温：{day.get('nighttemp','未知')}~{day.get('daytemp','未知')}℃",
+                f"  风向：{day.get('daywind','未知')} {day.get('daypower','未知')}级",
+                f"  降水量：{day.get('daytemp_float','未知')}",
+            ]
         return "\n".join(out)
 
     except requests.exceptions.Timeout:
@@ -126,24 +153,15 @@ def get_current_weather(location: str, extensions: Optional[str] = "base") -> st
 @tool("search_knowledge_base")
 def search_knowledge_base(query: str) -> str:
     """Search for information in the knowledge base using hybrid retrieval (dense + sparse vectors)."""
-    # ... guards omitted ...
-    global _KNOWLEDGE_TOOL_CALLS_THIS_TURN
-    if _KNOWLEDGE_TOOL_CALLS_THIS_TURN >= 1:
+    calls = _knowledge_tool_calls.get()
+    if calls >= 1:
         return (
             "TOOL_CALL_LIMIT_REACHED: search_knowledge_base has already been called once in this turn. "
             "Use the existing retrieval result and provide the final answer directly."
         )
-    _KNOWLEDGE_TOOL_CALLS_THIS_TURN += 1
+    _knowledge_tool_calls.set(calls + 1)
 
     from rag_pipeline import run_rag_graph
-
-    # 在同步工具中获取当前的 Loop 可能不可靠，但我们之前是通过 call_soon_threadsafe 调度的。
-    # 这里 _RAG_STEP_QUEUE 是在主线程/Loop 设置的全局变量。
-    # 如果工具运行在线程池中，它是可以访问到全局变量 _RAG_STEP_QUEUE 的。
-    # emit_rag_step 内部做了 try-except 和 get_event_loop()。
-
-    # 问题可能出在 asyncio.get_event_loop() 在子线程中调用会报错或者拿不到主线程的loop。
-    # 我们应该在 set_rag_step_queue 时也保存 loop 引用，或者在 emit_rag_step 中更健壮地获取 loop。
 
     rag_result = run_rag_graph(query)
 

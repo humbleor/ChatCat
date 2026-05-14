@@ -19,7 +19,7 @@ uv sync
 # 运行服务
 uv run python backend/app.py
 # 或
-cd backend/ & uv run uvicorn app:app --reload
+PYTHONPATH=./backend uv run uvicorn backend.app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ```bash
@@ -113,7 +113,7 @@ docker compose down
 
 ```bash
 uv run python backend/app.py
-uv run uvicorn backend.app:app --host 0.0.0.0 --port 8000 --reload
+cd backend && uv run uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 浏览器访问：

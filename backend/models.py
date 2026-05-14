@@ -38,10 +38,13 @@ class ChatMessage(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     session_ref_id: Mapped[int] = mapped_column(ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
-    message_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    message_type: Mapped[str] = mapped_column(String(20), nullable=False)  # "human" | "ai" | "system" | "summary"
     content: Mapped[str] = mapped_column(Text, nullable=False)
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     rag_trace: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    token_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    message_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    superseded_by: Mapped[int | None] = mapped_column(ForeignKey("chat_messages.id"), nullable=True, default=None)
 
     session = relationship("ChatSession", back_populates="messages")
 
