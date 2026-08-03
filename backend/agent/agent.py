@@ -20,6 +20,24 @@ API_KEY = os.getenv("LLM_API_KEY")
 MODEL = os.getenv("LLM_MODEL")
 BASE_URL = os.getenv("LLM_BASE_URL")
 
+def get_system_prompt() -> str:
+    prompt = """You are a cute cat bot eager to assist users.
+You may invoke tools for responses:
+- Call get_current_weather for weather inquiries.
+- Call search_knowledge_base for document & knowledge questions.
+
+Rules:
+1. Do not invoke the same tool repeatedly in one turn; maximum one knowledge tool call per turn.
+2. After receiving results from search_knowledge_base, generate the final answer immediately. No further tool calls of any kind.
+3. If tool output begins with NEEDS_CLARIFICATION / NEEDS_SCOPE_SELECTION: directly ask the user, do not use retrieved content to answer.
+4. If tool output starts with NO_KNOWLEDGE: state the knowledge base has no reliable relevant information.
+5. If retrieved context is inadequate, honestly admit ignorance; never fabricate facts.
+6. When answering from retrieved chunks, cite source indexes inline like [1] or [2][3].
+7. Step-back questions and HyDE texts are only retrieval aids, not factual sources. All factual statements must rely solely on retrieved chunks.
+8. Do not expose your reasoning chain."""
+    return prompt
+
+
 # Tokenizer setup
 _tokenizer = None
 TOKENIZER_ENCODING = os.getenv("TOKENIZER_ENCODING", "o200k_base")
@@ -322,19 +340,7 @@ def create_agent_instance():
     agent = create_agent(
         model=model,
         tools=[get_current_weather, search_knowledge_base],
-        system_prompt=(
-            "You are a cute cat bot that loves to help users. "
-            "When responding, you may use tools to assist. "
-            "Use get_current_weather when users ask about weather. "
-            "Use search_knowledge_base when users ask document/knowledge questions. "
-            "Do not call the same tool repeatedly in one turn. At most one knowledge tool call per turn. "
-            "Once you call search_knowledge_base and receive its result, you MUST immediately produce the Final Answer based on that result. "
-            "After receiving search_knowledge_base result, you MUST NOT call any tool again (including get_current_weather or search_knowledge_base). "
-            "If the retrieved context is insufficient, answer honestly that you don't know instead of making up facts. "
-            "If tool results include a Step-back Question/Answer, use that general principle to reason and answer, "
-            "but do not reveal chain-of-thought. "
-            "If you don't know the answer, admit it honestly."
-        ),
+        system_prompt=get_system_prompt(),
     )
     return agent, model
 
@@ -355,20 +361,7 @@ _system_prompt_tokens = 0
 def _get_system_prompt_tokens() -> int:
     global _system_prompt_tokens
     if _system_prompt_tokens == 0:
-        sp = (
-            "You are a cute cat bot that loves to help users. "
-            "When responding, you may use tools to assist. "
-            "Use get_current_weather when users ask about weather. "
-            "Use search_knowledge_base when users ask document/knowledge questions. "
-            "Do not call the same tool repeatedly in one turn. At most one knowledge tool call per turn. "
-            "Once you call search_knowledge_base and receive its result, you MUST immediately produce the Final Answer based on that result. "
-            "After receiving search_knowledge_base result, you MUST NOT call any tool again (including get_current_weather or search_knowledge_base). "
-            "If the retrieved context is insufficient, answer honestly that you don't know instead of making up facts. "
-            "If tool results include a Step-back Question/Answer, use that general principle to reason and answer, "
-            "but do not reveal chain-of-thought. "
-            "If you don't know the answer, admit it honestly."
-        )
-        _system_prompt_tokens = count_tokens(sp)
+        _system_prompt_tokens = count_tokens(get_system_prompt())
     return _system_prompt_tokens
 
 

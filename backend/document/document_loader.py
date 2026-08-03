@@ -4,7 +4,6 @@ from typing import Dict, List
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader, UnstructuredExcelLoader
 
-
 class DocumentLoader:
     """文档加载和分片服务"""
 
@@ -39,6 +38,14 @@ class DocumentLoader:
     @staticmethod
     def _build_chunk_id(filename: str, page_number: int, level: int, index: int) -> str:
         return f"{filename}::p{page_number}::l{level}::{index}"
+
+    def _is_supported_document(filename: str) -> bool:
+        file_lower = filename.lower()
+        return (
+            file_lower.endswith(".pdf")
+            or file_lower.endswith((".docx", ".doc"))
+            or file_lower.endswith((".xlsx", ".xls"))
+        )
 
     def _split_page_to_three_levels(
         self,
@@ -169,8 +176,7 @@ class DocumentLoader:
         all_documents = []
 
         for filename in os.listdir(folder_path):
-            file_lower = filename.lower()
-            if not (file_lower.endswith(".pdf") or file_lower.endswith((".docx", ".doc")) or file_lower.endswith((".xlsx", ".xls"))):
+            if not self._is_supported_document(filename):
                 continue
 
             file_path = os.path.join(folder_path, filename)

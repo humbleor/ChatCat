@@ -177,16 +177,6 @@ async def chat_stream_endpoint(request: ChatRequest, current_user: User = Depend
         },
     )
 
-
-def _is_supported_document(filename: str) -> bool:
-    file_lower = filename.lower()
-    return (
-        file_lower.endswith(".pdf")
-        or file_lower.endswith((".docx", ".doc"))
-        or file_lower.endswith((".xlsx", ".xls"))
-    )
-
-
 async def _save_upload_file(file: UploadFile, file_path: Path) -> None:
     """按块写入上传文件，避免大文件一次性读入内存。"""
     with open(file_path, "wb") as f:
@@ -334,7 +324,7 @@ async def upload_document_async(
     filename = file.filename or ""
     if not filename:
         raise HTTPException(status_code=400, detail="文件名不能为空")
-    if not _is_supported_document(filename):
+    if not loader._is_supported_document(filename):
         raise HTTPException(status_code=400, detail="仅支持 PDF、Word 和 Excel 文档")
 
     os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -411,11 +401,7 @@ async def upload_document(file: UploadFile = File(...), _: User = Depends(requir
         file_lower = filename.lower()
         if not filename:
             raise HTTPException(status_code=400, detail="文件名不能为空")
-        if not (
-            file_lower.endswith(".pdf")
-            or file_lower.endswith((".docx", ".doc"))
-            or file_lower.endswith((".xlsx", ".xls"))
-        ):
+        if not loader._is_supported_document(filename):
             raise HTTPException(status_code=400, detail="仅支持 PDF、Word 和 Excel 文档")
 
         os.makedirs(UPLOAD_DIR, exist_ok=True)
