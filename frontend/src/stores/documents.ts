@@ -32,7 +32,6 @@ export const useDocumentStore = defineStore('documents', {
     createDeleteSteps(): DeleteStep[] {
       return [
         { key: 'prepare', label: '准备删除', percent: 0, status: 'pending', message: '' },
-        { key: 'bm25', label: '同步 BM25 统计', percent: 0, status: 'pending', message: '' },
         { key: 'milvus', label: '删除向量数据', percent: 0, status: 'pending', message: '' },
         { key: 'parent_store', label: '删除父级分块', percent: 0, status: 'pending', message: '' },
       ];

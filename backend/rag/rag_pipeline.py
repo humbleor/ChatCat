@@ -1,9 +1,8 @@
-from typing import Literal, TypedDict, List, Optional
+from typing import TypedDict, List, Optional
 import os
 from dotenv import load_dotenv
 from langchain.chat_models import init_chat_model
 from langgraph.graph import StateGraph, END
-from pydantic import BaseModel, Field
 
 from backend.rag.rag_utils import retrieve_documents, step_back_expand, generate_hypothetical_document
 from backend.agent.tools import emit_rag_step
@@ -56,22 +55,29 @@ GRADE_PROMPT = (
     "Here is the retrieved document: \n\n {context} \n\n"
     "Here is the user question: {question} \n"
     "If the document contains keyword(s) or semantic meaning related to the user question, grade it as relevant. \n"
-    "Give a binary score 'yes' or 'no' score to indicate whether the document is relevant to the question."
+    "Give a binary score 'yes' or 'no' score to indicate whether the document is relevant to the question. \n"
+    "Respond with only the single word 'yes' or 'no'."
 )
 
 
-class GradeDocuments(BaseModel):
-    """Grade documents using a binary score for relevance check."""
+def _parse_grade(content: str) -> str:
+    """从打分模型的文本输出解析 yes/no；解析不出返回 unknown。"""
+    text = (content or "").strip().lower()
+    if "yes" in text:
+        return "yes"
+    if "no" in text:
+        return "no"
+    return "unknown"
 
-    binary_score: str = Field(
-        description="Relevance score: 'yes' if relevant, or 'no' if not relevant"
-    )
 
-
-class RewriteStrategy(BaseModel):
-    """Choose a query expansion strategy."""
-
-    strategy: Literal["step_back", "hyde", "complex"]
+def _parse_strategy(content: str) -> str:
+    """从重写模型的文本输出解析扩展策略；默认 step_back。"""
+    text = (content or "").strip().lower()
+    if "complex" in text:
+        return "complex"
+    if "hyde" in text:
+        return "hyde"
+    return "step_back"
 
 
 class RAGState(TypedDict):
@@ -158,22 +164,19 @@ def retrieve_initial(state: RAGState) -> RAGState:
 def grade_documents_node(state: RAGState) -> RAGState:
     grader = _get_grader_model()
     emit_rag_step("📊", "正在评估文档相关性...")
-    if not grader:
-        grade_update = {
-            "grade_score": "unknown",
-            "grade_route": "rewrite_question",
-            "rewrite_needed": True,
-        }
-        rag_trace = state.get("rag_trace", {}) or {}
-        rag_trace.update(grade_update)
-        return {"route": "rewrite_question", "rag_trace": rag_trace}
     question = state["question"]
     context = state.get("context", "")
-    prompt = GRADE_PROMPT.format(question=question, context=context)
-    response = grader.with_structured_output(GradeDocuments).invoke(
-        [{"role": "user", "content": prompt}]
-    )
-    score = (response.binary_score or "").strip().lower()
+    score = "unknown"
+    try:
+        if not grader:
+            raise RuntimeError("grader 模型未配置")
+        prompt = GRADE_PROMPT.format(question=question, context=context)
+        response = grader.invoke([{"role": "user", "content": prompt}])
+        content = response.content if hasattr(response, "content") else str(response)
+        score = _parse_grade(content)
+    except Exception:
+        # 打分失败时降级为“需要重写查询”，避免整个对话因单个 LLM 调用崩溃
+        score = "unknown"
     route = "generate_answer" if score == "yes" else "rewrite_question"
     if route == "generate_answer":
         emit_rag_step("✅", "文档相关性评估通过", f"评分: {score}")
@@ -203,10 +206,9 @@ def rewrite_question_node(state: RAGState) -> RAGState:
             f"用户问题：{question}"
         )
         try:
-            decision = router.with_structured_output(RewriteStrategy).invoke(
-                [{"role": "user", "content": prompt}]
-            )
-            strategy = decision.strategy
+            response = router.invoke([{"role": "user", "content": prompt}])
+            content = response.content if hasattr(response, "content") else str(response)
+            strategy = _parse_strategy(content)
         except Exception:
             strategy = "step_back"
 

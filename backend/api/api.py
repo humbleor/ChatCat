@@ -11,7 +11,7 @@ from backend.agent.agent import chat_with_agent, chat_with_agent_stream, storage
 from backend.infra.auth import authenticate_user, create_access_token, get_current_user, get_db, get_password_hash, require_admin, resolve_role
 from backend.document.document_loader import DocumentLoader
 from backend.vector.embedding import embedding_service
-from backend.vector.milvus_client import MilvusManager
+from backend.vector.milvus_client import get_milvus_store
 from backend.vector.milvus_writer import MilvusWriter
 from backend.models.models import User
 from backend.document.parent_chunk_store import ParentChunkStore
@@ -38,26 +38,16 @@ from backend.api.schemas import (
 )
 from backend.jobs.upload_jobs import DELETE_STEPS, delete_job_manager, upload_job_manager
 
-BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR.parent.parent / "data"
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = BASE_DIR.parent / "data"
 UPLOAD_DIR = DATA_DIR / "documents"
 
 loader = DocumentLoader()
 parent_chunk_store = ParentChunkStore()
-milvus_manager = MilvusManager()
-milvus_writer = MilvusWriter(embedding_service=embedding_service, milvus_manager=milvus_manager)
+milvus_store = get_milvus_store()
+milvus_writer = MilvusWriter(embedding_service=embedding_service, milvus_store=milvus_store)
 
 router = APIRouter()
-
-
-def _remove_bm25_stats_for_filename(filename: str) -> None:
-    """删除 Milvus 中该文件对应 chunk 前，先从持久化 BM25 统计中扣减。"""
-    rows = milvus_manager.query_all(
-        filter_expr=f'filename == "{filename}"',
-        output_fields=["text"],
-    )
-    texts = [r.get("text") or "" for r in rows]
-    embedding_service.increment_remove_documents(texts)
 
 
 @router.post("/auth/register", response_model=AuthResponse)
@@ -215,14 +205,10 @@ def _process_upload_job(job_id: str, file_path: str, filename: str) -> None:
 
         failed_step = "cleanup"
         upload_job_manager.update_step(job_id, "cleanup", 10, "running", "正在清理同名旧文档")
-        milvus_manager.init_collection()
+        milvus_store.init_collection()
         delete_expr = f'filename == "{filename}"'
         try:
-            _remove_bm25_stats_for_filename(filename)
-        except Exception:
-            pass
-        try:
-            milvus_manager.delete(delete_expr)
+            milvus_store.delete(delete_expr)
         except Exception:
             pass
         try:
@@ -289,18 +275,13 @@ def _process_delete_job(job_id: str, filename: str) -> None:
     try:
         failed_step = "prepare"
         delete_job_manager.update_step(job_id, "prepare", 20, "running", "正在初始化 Milvus 集合")
-        milvus_manager.init_collection()
+        milvus_store.init_collection()
         delete_expr = f'filename == "{filename}"'
         delete_job_manager.complete_step(job_id, "prepare", "删除任务已创建")
 
-        failed_step = "bm25"
-        delete_job_manager.update_step(job_id, "bm25", 20, "running", "正在同步 BM25 统计")
-        _remove_bm25_stats_for_filename(filename)
-        delete_job_manager.complete_step(job_id, "bm25", "BM25 统计已同步")
-
         failed_step = "milvus"
         delete_job_manager.update_step(job_id, "milvus", 30, "running", "正在删除 Milvus 向量数据")
-        result = milvus_manager.delete(delete_expr)
+        result = milvus_store.delete(delete_expr)
         deleted_count = result.get("delete_count", 0) if isinstance(result, dict) else 0
         delete_job_manager.complete_step(job_id, "milvus", f"向量数据已删除：{deleted_count} 条")
 
@@ -319,9 +300,9 @@ def _process_delete_job(job_id: str, filename: str) -> None:
 async def list_documents(_: User = Depends(require_admin)):
     """获取已上传的文档列表（管理员）"""
     try:
-        milvus_manager.init_collection()
+        milvus_store.init_collection()
 
-        results = milvus_manager.query(
+        results = milvus_store.query(
             output_fields=["filename", "file_type"],
             limit=10000,
         )
@@ -438,15 +419,11 @@ async def upload_document(file: UploadFile = File(...), _: User = Depends(requir
             raise HTTPException(status_code=400, detail="仅支持 PDF、Word 和 Excel 文档")
 
         os.makedirs(UPLOAD_DIR, exist_ok=True)
-        milvus_manager.init_collection()
+        milvus_store.init_collection()
 
         delete_expr = f'filename == "{filename}"'
         try:
-            _remove_bm25_stats_for_filename(filename)
-        except Exception:
-            pass
-        try:
-            milvus_manager.delete(delete_expr)
+            milvus_store.delete(delete_expr)
         except Exception:
             pass
         try:
@@ -493,11 +470,10 @@ async def upload_document(file: UploadFile = File(...), _: User = Depends(requir
 async def delete_document(filename: str, _: User = Depends(require_admin)):
     """删除文档在 Milvus 中的向量（保留本地文件，管理员）"""
     try:
-        milvus_manager.init_collection()
+        milvus_store.init_collection()
 
         delete_expr = f'filename == "{filename}"'
-        _remove_bm25_stats_for_filename(filename)
-        result = milvus_manager.delete(delete_expr)
+        result = milvus_store.delete(delete_expr)
         parent_chunk_store.delete_by_filename(filename)
 
         return DocumentDeleteResponse(

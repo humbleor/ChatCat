@@ -1,41 +1,37 @@
-"""文档向量化并写入 Milvus - 支持密集+稀疏向量"""
+"""文档向量化并写入 Milvus - 稀疏向量由服务端 BM25 Function 自动生成"""
 from backend.vector.embedding import EmbeddingService, embedding_service as _default_embedding_service
-from backend.vector.milvus_client import MilvusManager
+from backend.vector.milvus_client import MilvusStore, get_milvus_store
 
 
 class MilvusWriter:
     """文档向量化并写入 Milvus 服务 - 支持混合检索"""
 
-    def __init__(self, embedding_service: EmbeddingService = None, milvus_manager: MilvusManager = None):
+    def __init__(self, embedding_service: EmbeddingService = None, milvus_store: MilvusStore = None):
         self.embedding_service = embedding_service or _default_embedding_service
-        self.milvus_manager = milvus_manager or MilvusManager()
+        self.milvus_store = milvus_store or get_milvus_store()
 
     def write_documents(self, documents: list[dict], batch_size: int = 50, progress_callback=None):
         """
-        批量写入文档到 Milvus（同时生成密集和稀疏向量）
+        批量写入文档到 Milvus（稀疏向量由 Milvus 的 BM25 Function 在插入时根据 text 自动计算）
         :param documents: 文档列表
         :param batch_size: 批次大小
         """
         if not documents:
             return
 
-        self.milvus_manager.init_collection()
-
-        all_texts = [doc["text"] for doc in documents]
-        self.embedding_service.increment_add_documents(all_texts)
+        self.milvus_store.init_collection()
 
         total = len(documents)
         for i in range(0, total, batch_size):
             batch = documents[i:i + batch_size]
             texts = [doc["text"] for doc in batch]
-            
-            # 同时生成密集向量和稀疏向量
-            dense_embeddings, sparse_embeddings = self.embedding_service.get_all_embeddings(texts)
+
+            # 只生成密集向量；sparse_embedding 字段不能手动提供（BM25 function 自动生成）
+            dense_embeddings = self.embedding_service.get_embeddings(texts)
 
             insert_data = [
                 {
                     "dense_embedding": dense_emb,
-                    "sparse_embedding": sparse_emb,
                     "text": doc["text"],
                     "filename": doc["filename"],
                     "file_type": doc["file_type"],
@@ -47,10 +43,10 @@ class MilvusWriter:
                     "root_chunk_id": doc.get("root_chunk_id", ""),
                     "chunk_level": doc.get("chunk_level", 0),
                 }
-                for doc, dense_emb, sparse_emb in zip(batch, dense_embeddings, sparse_embeddings)
+                for doc, dense_emb in zip(batch, dense_embeddings)
             ]
 
-            self.milvus_manager.insert(insert_data)
+            self.milvus_store.insert(insert_data)
 
             # 每个批次写入后更新进度，前端据此展示“向量化入库 xx%”。
             if progress_callback:

@@ -74,12 +74,13 @@ Frontend is now **Vite + TypeScript + Vue 3** (not CDN single-file). Source in `
 
 1. **Entry point changed**: Backend entry is `backend/core/app.py`, NOT `backend/app.py`.
 2. **`set_rag_step_queue()` must be called from main thread** before agent runs — captures asyncio event loop for cross-thread RAG step emission via `call_soon_threadsafe`.
-3. **BM25 state** lives at `data/bm25_state.json` (gitignored). If Milvus has data but this file is missing, sparse retrieval breaks silently — reset by re-uploading documents.
+3. **服务端 BM25 Function**：`sparse_embedding` 由 Milvus 在插入时根据 `text` 自动生成，客户端不再计算/上传稀疏向量，也不再有 `data/bm25_state.json`。集合 schema 含 BM25 Function（text 需 `enable_analyzer` + `enable_match`）后与旧 schema 不兼容，**升级需 drop collection 并重新上传文档**。
 4. **`CLAUDE.md` is tracked in git** (shared).
-5. **`data/` is gitignored** — includes uploaded documents and BM25 state.
+5. **`data/` is gitignored** — includes uploaded documents.
 6. **Frontend build required** before backend serves static files — `cd frontend && npm run build` outputs to `frontend/dist/`.
 7. **Docker Compose startup order matters** — Milvus needs etcd + minio healthy first. Use `docker compose up -d` and wait for health checks.
 8. **`DENSE_EMBEDDING_DIM` must match Milvus collection schema** — changing the embedding model requires recreating the collection.
+9. **本地 Milvus 连接会被 `http(s)_proxy` 劫持**：gRPC 的 `no_proxy` 解析不支持通配符（如 `127.*`），shell 里设了 `http_proxy` 时 `127.0.0.1:19530` 会被误走代理，报 `Fail connecting to server ... illegal connection params or server unavailable`。`milvus_client.py` 在建连前会把 `127.0.0.1`/`localhost` 显式加入 `no_proxy`，无需手动处理。
 
 ## Key env vars
 

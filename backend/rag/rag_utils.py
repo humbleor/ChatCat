@@ -5,7 +5,7 @@ import json
 import requests
 from dotenv import load_dotenv
 
-from backend.vector.milvus_client import MilvusManager
+from backend.vector.milvus_client import get_milvus_store
 from backend.vector.embedding import embedding_service as _embedding_service
 from backend.document.parent_chunk_store import ParentChunkStore
 from langchain.chat_models import init_chat_model
@@ -22,8 +22,8 @@ AUTO_MERGE_ENABLED = os.getenv("AUTO_MERGE_ENABLED", "true").lower() != "false"
 AUTO_MERGE_THRESHOLD = int(os.getenv("AUTO_MERGE_THRESHOLD", "2"))
 LEAF_RETRIEVE_LEVEL = int(os.getenv("LEAF_RETRIEVE_LEVEL", "3"))
 
-# 全局初始化检索依赖（与 api 共用 embedding_service，保证 BM25 状态一致）
-_milvus_manager = MilvusManager()
+# 全局初始化检索依赖（与 api 共用 embedding_service）
+_milvus_store = get_milvus_store()
 _parent_chunk_store = ParentChunkStore()
 
 _stepback_model = None
@@ -248,11 +248,10 @@ def retrieve_documents(query: str, top_k: int = 5) -> Dict[str, Any]:
     try:
         dense_embeddings = _embedding_service.get_embeddings([query])
         dense_embedding = dense_embeddings[0]
-        sparse_embedding = _embedding_service.get_sparse_embedding(query)
 
-        retrieved = _milvus_manager.hybrid_retrieve(
+        retrieved = _milvus_store.hybrid_retrieve(
             dense_embedding=dense_embedding,
-            sparse_embedding=sparse_embedding,
+            query=query,
             top_k=candidate_k,
             filter_expr=filter_expr,
         )
@@ -267,7 +266,7 @@ def retrieve_documents(query: str, top_k: int = 5) -> Dict[str, Any]:
         try:
             dense_embeddings = _embedding_service.get_embeddings([query])
             dense_embedding = dense_embeddings[0]
-            retrieved = _milvus_manager.dense_retrieve(
+            retrieved = _milvus_store.dense_retrieve(
                 dense_embedding=dense_embedding,
                 top_k=candidate_k,
                 filter_expr=filter_expr,
