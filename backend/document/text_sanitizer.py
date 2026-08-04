@@ -17,9 +17,7 @@ import unicodedata
 # L1 —— C0（保留 \t \n \r）+ C1（0x80-0x9F）+ DEL
 _CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\x80-\x9f]")
 # L1 —— 不可见字符：软连字符、零宽(含 ZWNJ/ZWJ)、LRM/RLM、bidi 全集合(含 isolates)、word joiner、BOM
-_INVISIBLE_CHAR_RE = re.compile(
-    r"[\u00ad\u061c\u200b-\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff]"
-)
+_INVISIBLE_CHAR_RE = re.compile(r"[\u00ad\u061c\u200b-\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff]")
 # L1 —— 非字符
 _NONCHARACTER_RE = re.compile(r"[\ufdd0-\ufdef\ufffe\uffff]")
 # L1 —— 解码丢失标记（U+FFFD）
@@ -30,13 +28,9 @@ _PUA_RE = re.compile(r"[\ue000-\uf8ff]")
 _SUPPLEMENTARY_PUA_RE = re.compile(r"[\U000f0000-\U0010fffd]")
 
 # L2 —— 全角 ASCII 块 U+FF01..FF5E → 半角 U+0021..007E（确定性查表）
-_FULLWIDTH_TRANS = str.maketrans(
-    {0xFF01 + i: 0x0021 + i for i in range(0x5E)}
-)
+_FULLWIDTH_TRANS = str.maketrans({0xFF01 + i: 0x0021 + i for i in range(0x5E)})
 # L2 —— 各类"假空格" → 半角空格
-_SPACES_TRANS = str.maketrans(
-    {0x00A0: " ", 0x2007: " ", 0x202F: " ", 0x3000: " "}
-)
+_SPACES_TRANS = str.maketrans({0x00A0: " ", 0x2007: " ", 0x202F: " ", 0x3000: " "})
 
 # L3 —— 行尾统一
 _LINE_BREAK_RE = re.compile(r"\r\n?|[\n\u2028\u2029]")

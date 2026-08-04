@@ -1,6 +1,7 @@
-from typing import Optional
-import os
 import contextvars
+import os
+from typing import Optional
+
 import requests
 from dotenv import load_dotenv
 from langchain_core.tools import tool
@@ -53,6 +54,7 @@ def set_rag_step_queue(queue):
     _global_rag_queue = queue
     if queue:
         import asyncio
+
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
@@ -131,14 +133,14 @@ def get_current_weather(location: str, extensions: Optional[str] = "base") -> st
         if not casts:
             return f"未查询到 {location} 的天气预报数据"
         for i, day in enumerate(casts):
-            label = "今日天气" if i == 0 else f"未来第{i}天 ({day.get('date','')})"
+            label = "今日天气" if i == 0 else f"未来第{i}天 ({day.get('date', '')})"
             out += [
                 f"{label}：",
-                f"  白天：{day.get('dayweather','未知')}",
-                f"  夜间：{day.get('nightweather','未知')}",
-                f"  气温：{day.get('nighttemp','未知')}~{day.get('daytemp','未知')}℃",
-                f"  风向：{day.get('daywind','未知')} {day.get('daypower','未知')}级",
-                f"  降水量：{day.get('daytemp_float','未知')}",
+                f"  白天：{day.get('dayweather', '未知')}",
+                f"  夜间：{day.get('nightweather', '未知')}",
+                f"  气温：{day.get('nighttemp', '未知')}~{day.get('daytemp', '未知')}℃",
+                f"  风向：{day.get('daywind', '未知')} {day.get('daypower', '未知')}级",
+                f"  降水量：{day.get('daytemp_float', '未知')}",
             ]
         return "\n".join(out)
 

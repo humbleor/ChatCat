@@ -18,15 +18,19 @@
         </div>
       </header>
 
-      <div class="chat-container" ref="chatContainerRef">
+      <div ref="chatContainerRef" class="chat-container">
         <WelcomeScreen v-if="chatStore.messages.length === 0" />
 
         <MessageItem
           v-for="(msg, index) in chatStore.messages"
           :key="index"
+          :ref="
+            (el) => {
+              if (el) messageItemRefs[index] = el;
+            }
+          "
           :msg="msg"
           :msg-index="index"
-          :ref="(el) => { if (el) messageItemRefs[index] = el; }"
           @cite-click="scrollToChunk"
         />
       </div>

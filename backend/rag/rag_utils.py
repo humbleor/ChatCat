@@ -1,15 +1,16 @@
-from collections import defaultdict
-from typing import List, Tuple, Dict, Any
-import os
 import json
+import os
+from collections import defaultdict
+from typing import Any, Dict, List, Tuple
+
 import requests
 from dotenv import load_dotenv
+from langchain.chat_models import init_chat_model
 
-from backend.vector.milvus_client import get_milvus_store
-from backend.vector.embedding import embedding_service as _embedding_service
 from backend.document.parent_chunk_store import ParentChunkStore
 from backend.document.text_sanitizer import sanitize_text
-from langchain.chat_models import init_chat_model
+from backend.vector.embedding import embedding_service as _embedding_service
+from backend.vector.milvus_client import get_milvus_store
 
 load_dotenv()
 
@@ -229,11 +230,7 @@ def step_back_expand(query: str) -> dict:
     step_back_question = _generate_step_back_question(query)
     step_back_answer = _answer_step_back_question(step_back_question)
     if step_back_question or step_back_answer:
-        expanded_query = (
-            f"{query}\n\n"
-            f"退步问题：{step_back_question}\n"
-            f"退步问题答案：{step_back_answer}"
-        )
+        expanded_query = f"{query}\n\n退步问题：{step_back_question}\n退步问题答案：{step_back_answer}"
     else:
         expanded_query = query
     return {

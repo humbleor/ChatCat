@@ -126,16 +126,17 @@ describe('chat store streaming sessions', () => {
     vi.restoreAllMocks();
     vi.stubGlobal('localStorage', createLocalStorageMock());
     vi.stubGlobal('alert', vi.fn());
-    vi.stubGlobal('confirm', vi.fn(() => true));
+    vi.stubGlobal(
+      'confirm',
+      vi.fn(() => true)
+    );
   });
 
   it('clears account-scoped chat state when the authenticated workspace changes', () => {
     const { chatStore } = setupStores();
     const previousSessionId = chatStore.sessionId;
 
-    chatStore.messagesBySession.session_current = [
-      { text: '上一个账号的消息', isUser: true },
-    ];
+    chatStore.messagesBySession.session_current = [{ text: '上一个账号的消息', isUser: true }];
     chatStore.messages = chatStore.messagesBySession.session_current;
     chatStore.userInput = '未发送的草稿';
     chatStore.activeNav = 'settings';
@@ -263,12 +264,9 @@ describe('chat store streaming sessions', () => {
       text: '(已终止回答)',
       isThinking: false,
     });
-    expect(chatStore.messagesBySession.session_other.map((msg) => msg.text)).toEqual([
-      '另一个会话',
-    ]);
+    expect(chatStore.messagesBySession.session_other.map((msg) => msg.text)).toEqual(['另一个会话']);
     expect(chatStore.sessionId).toBe('session_other');
     expect(chatStore.isLoading).toBe(false);
     expect(chatStore.streamingSessionId).toBeNull();
   });
-
 });

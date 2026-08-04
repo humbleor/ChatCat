@@ -34,3 +34,45 @@ dependencies = [
     "python-jose[cryptography]>=3.3.0",
     "tiktoken>=0.8.0",
 ]
+
+[project.optional-dependencies]
+dev = [
+    "black>=24.0.0",
+    "ruff>=0.6.0",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+# 追加默认排除项（.venv/.git 等已由 ruff 默认排除）
+extend-exclude = [
+    "frontend",
+    "data",
+]
+fix = true
+
+[tool.ruff.lint]
+select = [
+    "E", "W", # flake8 error/warning
+    "I",      # import排序
+    "F",      # 语法简化
+]
+# 需要更强规则时可追加："UP" (pyupgrade), "B" (bugbear), "SIM" (simplify)
+
+[tool.ruff.lint.isort]
+known-first-party = ["backend"]
+
+# ruff format 与 black 保持一致的风格
+[tool.ruff.format]
+quote-style = "double"
+skip-magic-trailing-comma = false
+
+[tool.black]
+line-length = 120
+target-version = ["py312"]
+extend-exclude = '''
+/(
+    frontend
+  | data
+)/
+'''

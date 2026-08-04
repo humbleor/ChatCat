@@ -1,9 +1,5 @@
 <template>
-  <div 
-    class="message-content" 
-    v-html="parsedHtml" 
-    @click="onContentClick"
-  ></div>
+  <div class="message-content" @click="onContentClick" v-html="parsedHtml"></div>
 </template>
 
 <script setup lang="ts">

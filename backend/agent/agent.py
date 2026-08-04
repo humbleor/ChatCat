@@ -1,16 +1,24 @@
-from dotenv import load_dotenv
-import os
-import json
 import asyncio
+import json
 import logging
-from langchain.chat_models import init_chat_model
-from langchain.agents import create_agent
-from langchain_core.messages import HumanMessage, AIMessage, AIMessageChunk, SystemMessage
-from backend.agent.tools import get_current_weather, search_knowledge_base, get_last_rag_context, reset_tool_call_guards, set_rag_step_queue
+import os
 from datetime import datetime
+
+from dotenv import load_dotenv
+from langchain.agents import create_agent
+from langchain.chat_models import init_chat_model
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, SystemMessage
+
+from backend.agent.tools import (
+    get_current_weather,
+    get_last_rag_context,
+    reset_tool_call_guards,
+    search_knowledge_base,
+    set_rag_step_queue,
+)
 from backend.infra.cache import cache
 from backend.infra.database import SessionLocal
-from backend.models.models import User, ChatSession, ChatMessage
+from backend.models.models import ChatMessage, ChatSession, User
 
 load_dotenv()
 
@@ -19,6 +27,7 @@ logger = logging.getLogger(__name__)
 API_KEY = os.getenv("LLM_API_KEY")
 MODEL = os.getenv("LLM_MODEL")
 BASE_URL = os.getenv("LLM_BASE_URL")
+
 
 def get_system_prompt() -> str:
     prompt = """You are a cute cat bot eager to assist users.
@@ -47,6 +56,7 @@ def _get_tokenizer():
     global _tokenizer
     if _tokenizer is None:
         import tiktoken
+
         try:
             _tokenizer = tiktoken.get_encoding(TOKENIZER_ENCODING)
         except Exception:
@@ -60,6 +70,7 @@ def count_tokens(text: str) -> int:
         return len(_get_tokenizer().encode(text))
     except Exception:
         return len(text) // 4
+
 
 class ConversationStorage:
     """对话存储(PostgreSQL + Redis), append-only + superseded_by 标记。"""
@@ -87,7 +98,7 @@ class ConversationStorage:
             }
             if msg_type in ("system", "summary"):
                 extra["_msg_type"] = msg_type
-                extra["_is_summary"] = (msg_type == "summary")
+                extra["_is_summary"] = msg_type == "summary"
 
             if msg_type == "human":
                 msg = HumanMessage(content=content)
@@ -99,7 +110,9 @@ class ConversationStorage:
             messages.append(msg)
         return messages
 
-    def save(self, user_id: str, session_id: str, messages: list, metadata: dict = None, extra_message_data: list = None):
+    def save(
+        self, user_id: str, session_id: str, messages: list, metadata: dict = None, extra_message_data: list = None
+    ):
         """增量保存对话：只 INSERT 新消息，UPDATE superseded_by 标记。"""
         db = SessionLocal()
         try:
@@ -138,14 +151,16 @@ class ConversationStorage:
                     # 已有消息：检查是否需要更新 superseded_by
                     if supersedes_ids:
                         self._mark_superseded(db, msg, db_id, supersedes_ids)
-                    serialized.append({
-                        "type": msg.type,
-                        "content": str(msg.content),
-                        "id": db_id,
-                        "timestamp": msg.additional_kwargs.get("_timestamp", now.isoformat()),
-                        "token_count": msg.additional_kwargs.get("_token_count", 0),
-                        "rag_trace": msg.additional_kwargs.get("_rag_trace"),
-                    })
+                    serialized.append(
+                        {
+                            "type": msg.type,
+                            "content": str(msg.content),
+                            "id": db_id,
+                            "timestamp": msg.additional_kwargs.get("_timestamp", now.isoformat()),
+                            "token_count": msg.additional_kwargs.get("_token_count", 0),
+                            "rag_trace": msg.additional_kwargs.get("_rag_trace"),
+                        }
+                    )
                     continue
 
                 # 新消息：INSERT
@@ -178,14 +193,16 @@ class ConversationStorage:
                 if supersedes_ids and db_id:
                     self._mark_superseded(db, msg, db_id, supersedes_ids)
 
-                serialized.append({
-                    "type": msg_type,
-                    "content": str(msg.content),
-                    "id": db_id,
-                    "token_count": tk,
-                    "timestamp": now.isoformat(),
-                    "rag_trace": rag_trace,
-                })
+                serialized.append(
+                    {
+                        "type": msg_type,
+                        "content": str(msg.content),
+                        "id": db_id,
+                        "token_count": tk,
+                        "timestamp": now.isoformat(),
+                        "rag_trace": rag_trace,
+                    }
+                )
 
             session.updated_at = now
             db.commit()
@@ -249,11 +266,13 @@ class ConversationStorage:
                     .filter(ChatMessage.session_ref_id == s.id, ChatMessage.superseded_by.is_(None))
                     .count()
                 )
-                result.append({
-                    "session_id": s.session_id,
-                    "updated_at": s.updated_at.isoformat(),
-                    "message_count": count,
-                })
+                result.append(
+                    {
+                        "session_id": s.session_id,
+                        "updated_at": s.updated_at.isoformat(),
+                        "message_count": count,
+                    }
+                )
             cache.set_json(self._sessions_cache_key(user_id), result)
             return result
         finally:
@@ -326,7 +345,6 @@ class ConversationStorage:
             db.close()
 
 
-
 def create_agent_instance():
     model = init_chat_model(
         model=MODEL,
@@ -373,10 +391,7 @@ def _available_budget() -> int:
 
 def summarize_old_messages(model, messages: list) -> str:
     """将旧消息总结为摘要。"""
-    old_conversation = "\n".join([
-        f"{'用户' if msg.type == 'human' else 'AI'}: {msg.content}"
-        for msg in messages
-    ])
+    old_conversation = "\n".join([f"{'用户' if msg.type == 'human' else 'AI'}: {msg.content}" for msg in messages])
 
     summary_prompt = f"""请总结以下对话的关键信息：
 
@@ -394,10 +409,7 @@ def _manage_context_window(messages: list, model) -> list:
     已标记为 _is_summary 的消息不会被二次压缩。
     """
     budget = _available_budget()
-    total_tokens = sum(
-        msg.additional_kwargs.get("_token_count", 0)
-        for msg in messages
-    )
+    total_tokens = sum(msg.additional_kwargs.get("_token_count", 0) for msg in messages)
 
     if total_tokens <= budget:
         return messages
@@ -425,11 +437,7 @@ def _manage_context_window(messages: list, model) -> list:
         return messages  # 全是摘要，无法进一步压缩
 
     summary = summarize_old_messages(model, candidates)
-    supersedes_ids = [
-        m.additional_kwargs["_db_id"]
-        for m in candidates
-        if m.additional_kwargs.get("_db_id")
-    ]
+    supersedes_ids = [m.additional_kwargs["_db_id"] for m in candidates if m.additional_kwargs.get("_db_id")]
 
     summary_msg = SystemMessage(content=f"之前的对话摘要：\n{summary}")
     summary_msg.additional_kwargs["_msg_type"] = "summary"
@@ -505,6 +513,7 @@ async def chat_with_agent_stream(user_text: str, user_id: str = "default_user", 
 
     class _RagStepProxy:
         """代理对象：将 emit_rag_step 的原始 step dict 包装后放入统一输出队列。"""
+
         def put_nowait(self, step):
             output_queue.put_nowait({"type": "rag_step", "step": step})
 

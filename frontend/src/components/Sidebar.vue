@@ -73,9 +73,7 @@
           </span>
         </button>
 
-        <div v-if="!recentSessions.length" class="recent-empty">
-          还没有历史会话，问喵喵一个问题吧。
-        </div>
+        <div v-if="!recentSessions.length" class="recent-empty">还没有历史会话，问喵喵一个问题吧。</div>
       </div>
     </template>
 
@@ -130,7 +128,7 @@ const workspaceMeta = computed(() => {
   return (sessionStore.sessions.length || 0) + ' 个会话 · 私有';
 });
 
-const roleLabel = computed(() => authStore.currentUser?.role === 'admin' ? '管理员' : '普通用户');
+const roleLabel = computed(() => (authStore.currentUser?.role === 'admin' ? '管理员' : '普通用户'));
 
 const userInitials = computed(() => {
   const name = authStore.currentUser?.username || 'ME';

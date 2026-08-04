@@ -111,7 +111,7 @@ export const useChatStore = defineStore('chat', {
       const groups = prev ? [...prev] : [];
       const g = step.group || null;
       const groupLabel = step.group_label || g;
-      
+
       if (g) {
         const idx = groups.findIndex((grp) => grp.group === g);
         if (idx >= 0) {

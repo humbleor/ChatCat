@@ -3,6 +3,7 @@
 稀疏向量由 Milvus 服务端 BM25 Function 在插入时根据 text 字段自动生成，
 客户端不再计算/上传 sparse_embedding，也不再维护 data/bm25_state.json 那套状态。
 """
+
 from __future__ import annotations
 
 import os
@@ -49,7 +50,7 @@ def _normalize_filter(filter_expr: str) -> str:
 
 def _ensure_no_proxy_localhost() -> None:
     # 确保 gRPC 直连本地 Milvus，不被 http(s)_proxy 劫持。
-    
+
     for var in ("no_proxy", "NO_PROXY"):
         current = os.environ.get(var, "")
         parts = [p.strip() for p in current.split(",") if p.strip()]
@@ -309,19 +310,21 @@ class MilvusStore:
         formatted_results = []
         for hits in results:
             for hit in hits:
-                formatted_results.append({
-                    "id": hit.get("id"),
-                    "text": hit.get("text", ""),
-                    "filename": hit.get("filename", ""),
-                    "file_type": hit.get("file_type", ""),
-                    "page_number": hit.get("page_number", 0),
-                    "chunk_id": hit.get("chunk_id", ""),
-                    "parent_chunk_id": hit.get("parent_chunk_id", ""),
-                    "root_chunk_id": hit.get("root_chunk_id", ""),
-                    "chunk_level": hit.get("chunk_level", 0),
-                    "chunk_idx": hit.get("chunk_idx", 0),
-                    "score": hit.get("distance", 0.0),
-                })
+                formatted_results.append(
+                    {
+                        "id": hit.get("id"),
+                        "text": hit.get("text", ""),
+                        "filename": hit.get("filename", ""),
+                        "file_type": hit.get("file_type", ""),
+                        "page_number": hit.get("page_number", 0),
+                        "chunk_id": hit.get("chunk_id", ""),
+                        "parent_chunk_id": hit.get("parent_chunk_id", ""),
+                        "root_chunk_id": hit.get("root_chunk_id", ""),
+                        "chunk_level": hit.get("chunk_level", 0),
+                        "chunk_idx": hit.get("chunk_idx", 0),
+                        "score": hit.get("distance", 0.0),
+                    }
+                )
         return formatted_results
 
     def dense_retrieve(
@@ -355,25 +358,25 @@ class MilvusStore:
         formatted_results = []
         for hits in results:
             for hit in hits:
-                formatted_results.append({
-                    "id": hit.get("id"),
-                    "text": hit.get("entity", {}).get("text", ""),
-                    "filename": hit.get("entity", {}).get("filename", ""),
-                    "file_type": hit.get("entity", {}).get("file_type", ""),
-                    "page_number": hit.get("entity", {}).get("page_number", 0),
-                    "chunk_id": hit.get("entity", {}).get("chunk_id", ""),
-                    "parent_chunk_id": hit.get("entity", {}).get("parent_chunk_id", ""),
-                    "root_chunk_id": hit.get("entity", {}).get("root_chunk_id", ""),
-                    "chunk_level": hit.get("entity", {}).get("chunk_level", 0),
-                    "chunk_idx": hit.get("entity", {}).get("chunk_idx", 0),
-                    "score": hit.get("distance", 0.0),
-                })
+                formatted_results.append(
+                    {
+                        "id": hit.get("id"),
+                        "text": hit.get("entity", {}).get("text", ""),
+                        "filename": hit.get("entity", {}).get("filename", ""),
+                        "file_type": hit.get("entity", {}).get("file_type", ""),
+                        "page_number": hit.get("entity", {}).get("page_number", 0),
+                        "chunk_id": hit.get("entity", {}).get("chunk_id", ""),
+                        "parent_chunk_id": hit.get("entity", {}).get("parent_chunk_id", ""),
+                        "root_chunk_id": hit.get("entity", {}).get("root_chunk_id", ""),
+                        "chunk_level": hit.get("entity", {}).get("chunk_level", 0),
+                        "chunk_idx": hit.get("entity", {}).get("chunk_idx", 0),
+                        "score": hit.get("distance", 0.0),
+                    }
+                )
         return formatted_results
 
     def delete(self, filter_expr: str):
-        return self._run(
-            lambda client: client.delete(collection_name=self.collection_name, filter=filter_expr)
-        )
+        return self._run(lambda client: client.delete(collection_name=self.collection_name, filter=filter_expr))
 
     def has_collection(self) -> bool:
         return self._run(lambda client: client.has_collection(self.collection_name))

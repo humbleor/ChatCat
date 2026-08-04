@@ -3,6 +3,7 @@
 轻量版先使用进程内存保存任务状态，适合当前单进程开发部署。
 如果后续要支持多进程或服务重启恢复，可以把同样的数据结构迁移到 Redis/PostgreSQL。
 """
+
 from __future__ import annotations
 
 from copy import deepcopy
@@ -10,7 +11,6 @@ from datetime import UTC, datetime
 from threading import Lock
 from typing import Literal
 from uuid import uuid4
-
 
 StepStatus = Literal["pending", "running", "completed", "failed"]
 JobStatus = Literal["pending", "running", "completed", "failed"]

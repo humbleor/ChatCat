@@ -1,13 +1,7 @@
 <template>
   <div class="input-area-wrapper">
     <div class="input-area">
-      <button
-        class="attach-btn"
-        type="button"
-        title="当前版本暂不支持聊天附件"
-        aria-label="聊天附件暂不可用"
-        disabled
-      >
+      <button class="attach-btn" type="button" title="当前版本暂不支持聊天附件" aria-label="聊天附件暂不可用" disabled>
         <i class="fa-solid fa-paperclip"></i>
       </button>
 

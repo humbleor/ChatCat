@@ -28,10 +28,7 @@
       </button>
     </div>
 
-    <div
-      v-if="deleteJob"
-      :class="['upload-progress', 'delete-progress', { collapsed: deleteJob.collapsed }]"
-    >
+    <div v-if="deleteJob" :class="['upload-progress', 'delete-progress', { collapsed: deleteJob.collapsed }]">
       <button type="button" class="upload-progress-header" @click="onToggleCollapse">
         <span>
           <strong>{{ deleteJob.message || '删除进度' }}</strong>
@@ -44,11 +41,7 @@
       </button>
 
       <div v-show="!deleteJob.collapsed" class="upload-step-list">
-        <div
-          v-for="step in deleteJob.steps"
-          :key="step.key"
-          :class="['upload-step', 'upload-step-' + step.status]"
-        >
+        <div v-for="step in deleteJob.steps" :key="step.key" :class="['upload-step', 'upload-step-' + step.status]">
           <div class="upload-step-header">
             <span class="upload-step-label">{{ step.label }}</span>
             <span class="upload-step-percent">{{ step.percent }}%</span>

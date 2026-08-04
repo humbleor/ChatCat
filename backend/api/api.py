@@ -8,13 +8,6 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from backend.agent.agent import chat_with_agent, chat_with_agent_stream, storage
-from backend.infra.auth import authenticate_user, create_access_token, get_current_user, get_db, get_password_hash, require_admin, resolve_role
-from backend.document.document_loader import DocumentLoader
-from backend.vector.embedding import embedding_service
-from backend.vector.milvus_client import get_milvus_store
-from backend.vector.milvus_writer import MilvusWriter
-from backend.models.models import User
-from backend.document.parent_chunk_store import ParentChunkStore
 from backend.api.schemas import (
     AuthResponse,
     ChatRequest,
@@ -36,7 +29,22 @@ from backend.api.schemas import (
     SessionListResponse,
     SessionMessagesResponse,
 )
+from backend.document.document_loader import DocumentLoader
+from backend.document.parent_chunk_store import ParentChunkStore
+from backend.infra.auth import (
+    authenticate_user,
+    create_access_token,
+    get_current_user,
+    get_db,
+    get_password_hash,
+    require_admin,
+    resolve_role,
+)
 from backend.jobs.upload_jobs import DELETE_STEPS, delete_job_manager, upload_job_manager
+from backend.models.models import User
+from backend.vector.embedding import embedding_service
+from backend.vector.milvus_client import get_milvus_store
+from backend.vector.milvus_writer import MilvusWriter
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR.parent / "data"
@@ -143,10 +151,7 @@ async def chat_endpoint(request: ChatRequest, current_user: User = Depends(get_c
             if code == 429:
                 raise HTTPException(
                     status_code=429,
-                    detail=(
-                        "上游模型服务触发限流/额度限制（429）。请检查账号额度/模型状态。\n"
-                        f"原始错误：{message}"
-                    ),
+                    detail=(f"上游模型服务触发限流/额度限制（429）。请检查账号额度/模型状态。\n原始错误：{message}"),
                 )
             if code in (401, 403):
                 raise HTTPException(status_code=code, detail=message)
@@ -176,6 +181,7 @@ async def chat_stream_endpoint(request: ChatRequest, current_user: User = Depend
             "X-Accel-Buffering": "no",
         },
     )
+
 
 async def _save_upload_file(file: UploadFile, file_path: Path) -> None:
     """按块写入上传文件，避免大文件一次性读入内存。"""
@@ -314,6 +320,7 @@ async def list_documents(_: User = Depends(require_admin)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取文档列表失败: {str(e)}")
 
+
 @router.post("/documents/upload/async", response_model=DocumentUploadStartResponse)
 async def upload_document_async(
     background_tasks: BackgroundTasks,
@@ -398,7 +405,6 @@ async def upload_document(file: UploadFile = File(...), _: User = Depends(requir
     """上传文档并进行 embedding（管理员）"""
     try:
         filename = file.filename or ""
-        file_lower = filename.lower()
         if not filename:
             raise HTTPException(status_code=400, detail="文件名不能为空")
         if not loader._is_supported_document(filename):

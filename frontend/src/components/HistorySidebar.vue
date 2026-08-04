@@ -12,7 +12,9 @@
       </div>
 
       <div class="history-summary">
-        <span><strong>{{ sessionStore.sessions.length }}</strong> 个会话</span>
+        <span
+          ><strong>{{ sessionStore.sessions.length }}</strong> 个会话</span
+        >
         <button type="button" @click="refreshSessions">
           <i class="fa-solid fa-rotate" :class="{ 'fa-spin': refreshing }"></i>
           刷新

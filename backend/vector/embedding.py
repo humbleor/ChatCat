@@ -1,4 +1,5 @@
 """文本向量化服务 - 密集向量本地模型（稀疏向量由 Milvus 服务端 BM25 Function 生成）"""
+
 import os
 
 from dotenv import load_dotenv

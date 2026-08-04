@@ -58,10 +58,8 @@ export interface RagTraceFields {
   rewrite_retrieved_chunks?: RetrievedChunk[];
 }
 
-export interface RagSubTrace extends RagTraceFields {}
-
 export interface RagTrace extends RagTraceFields {
-  sub_traces?: RagSubTrace[];
+  sub_traces?: RagTraceFields[];
 }
 
 export interface RagStep {

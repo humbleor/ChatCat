@@ -1,11 +1,12 @@
-from typing import TypedDict, List, Optional
 import os
+from typing import List, Optional, TypedDict
+
 from dotenv import load_dotenv
 from langchain.chat_models import init_chat_model
-from langgraph.graph import StateGraph, END
+from langgraph.graph import END, StateGraph
 
-from backend.rag.rag_utils import retrieve_documents, step_back_expand, generate_hypothetical_document
 from backend.agent.tools import emit_rag_step
+from backend.rag.rag_utils import generate_hypothetical_document, retrieve_documents, step_back_expand
 
 load_dotenv()
 
@@ -116,10 +117,7 @@ def retrieve_initial(state: RAGState) -> RAGState:
     emit_rag_step(
         "🧱",
         "三级分块检索",
-        (
-            f"叶子层 L{retrieve_meta.get('leaf_retrieve_level', 3)} 召回，"
-            f"候选 {retrieve_meta.get('candidate_k', 0)}"
-        ),
+        (f"叶子层 L{retrieve_meta.get('leaf_retrieve_level', 3)} 召回，候选 {retrieve_meta.get('candidate_k', 0)}"),
     )
     emit_rag_step(
         "🧩",
@@ -130,7 +128,9 @@ def retrieve_initial(state: RAGState) -> RAGState:
             f"替换片段: {retrieve_meta.get('auto_merge_replaced_chunks', 0)}"
         ),
     )
-    emit_rag_step("✅", f"检索完成，找到 {len(results)} 个片段", f"模式: {retrieve_meta.get('retrieval_mode', 'hybrid')}")
+    emit_rag_step(
+        "✅", f"检索完成，找到 {len(results)} 个片段", f"模式: {retrieve_meta.get('retrieval_mode', 'hybrid')}"
+    )
     rag_trace = {
         "tool_used": True,
         "tool_name": "search_knowledge_base",
@@ -229,10 +229,12 @@ def rewrite_question_node(state: RAGState) -> RAGState:
         hypothetical_doc = generate_hypothetical_document(question)
 
     rag_trace = state.get("rag_trace", {}) or {}
-    rag_trace.update({
-        "rewrite_strategy": strategy,
-        "rewrite_query": expanded_query,
-    })
+    rag_trace.update(
+        {
+            "rewrite_strategy": strategy,
+            "rewrite_query": expanded_query,
+        }
+    )
 
     return {
         "expansion_type": strategy,
@@ -285,7 +287,9 @@ def retrieve_expanded(state: RAGState) -> RAGState:
         retrieval_mode = retrieval_mode or hyde_meta.get("retrieval_mode")
         candidate_k = candidate_k or hyde_meta.get("candidate_k")
         leaf_retrieve_level = leaf_retrieve_level or hyde_meta.get("leaf_retrieve_level")
-        auto_merge_enabled = auto_merge_enabled if auto_merge_enabled is not None else hyde_meta.get("auto_merge_enabled")
+        auto_merge_enabled = (
+            auto_merge_enabled if auto_merge_enabled is not None else hyde_meta.get("auto_merge_enabled")
+        )
         auto_merge_applied = auto_merge_applied or bool(hyde_meta.get("auto_merge_applied"))
         auto_merge_threshold = auto_merge_threshold or hyde_meta.get("auto_merge_threshold")
         auto_merge_replaced_chunks += int(hyde_meta.get("auto_merge_replaced_chunks") or 0)
@@ -314,7 +318,9 @@ def retrieve_expanded(state: RAGState) -> RAGState:
         retrieval_mode = retrieval_mode or step_meta.get("retrieval_mode")
         candidate_k = candidate_k or step_meta.get("candidate_k")
         leaf_retrieve_level = leaf_retrieve_level or step_meta.get("leaf_retrieve_level")
-        auto_merge_enabled = auto_merge_enabled if auto_merge_enabled is not None else step_meta.get("auto_merge_enabled")
+        auto_merge_enabled = (
+            auto_merge_enabled if auto_merge_enabled is not None else step_meta.get("auto_merge_enabled")
+        )
         auto_merge_applied = auto_merge_applied or bool(step_meta.get("auto_merge_applied"))
         auto_merge_threshold = auto_merge_threshold or step_meta.get("auto_merge_threshold")
         auto_merge_replaced_chunks += int(step_meta.get("auto_merge_replaced_chunks") or 0)
@@ -337,29 +343,31 @@ def retrieve_expanded(state: RAGState) -> RAGState:
     context = _format_docs(deduped)
     emit_rag_step("✅", f"扩展检索完成，共 {len(deduped)} 个片段")
     rag_trace = state.get("rag_trace", {}) or {}
-    rag_trace.update({
-        "expanded_query": state.get("expanded_query") or state["question"],
-        "step_back_question": state.get("step_back_question", ""),
-        "step_back_answer": state.get("step_back_answer", ""),
-        "hypothetical_doc": state.get("hypothetical_doc", ""),
-        "expansion_type": strategy,
-        "retrieved_chunks": deduped,
-        "expanded_retrieved_chunks": deduped,
-        "retrieval_stage": "expanded",
-        "rerank_enabled": rerank_enabled_any,
-        "rerank_applied": rerank_applied_any,
-        "rerank_model": rerank_model,
-        "rerank_endpoint": rerank_endpoint,
-        "rerank_error": "; ".join(rerank_errors) if rerank_errors else None,
-        "retrieval_mode": retrieval_mode,
-        "candidate_k": candidate_k,
-        "leaf_retrieve_level": leaf_retrieve_level,
-        "auto_merge_enabled": auto_merge_enabled,
-        "auto_merge_applied": auto_merge_applied,
-        "auto_merge_threshold": auto_merge_threshold,
-        "auto_merge_replaced_chunks": auto_merge_replaced_chunks,
-        "auto_merge_steps": auto_merge_steps,
-    })
+    rag_trace.update(
+        {
+            "expanded_query": state.get("expanded_query") or state["question"],
+            "step_back_question": state.get("step_back_question", ""),
+            "step_back_answer": state.get("step_back_answer", ""),
+            "hypothetical_doc": state.get("hypothetical_doc", ""),
+            "expansion_type": strategy,
+            "retrieved_chunks": deduped,
+            "expanded_retrieved_chunks": deduped,
+            "retrieval_stage": "expanded",
+            "rerank_enabled": rerank_enabled_any,
+            "rerank_applied": rerank_applied_any,
+            "rerank_model": rerank_model,
+            "rerank_endpoint": rerank_endpoint,
+            "rerank_error": "; ".join(rerank_errors) if rerank_errors else None,
+            "retrieval_mode": retrieval_mode,
+            "candidate_k": candidate_k,
+            "leaf_retrieve_level": leaf_retrieve_level,
+            "auto_merge_enabled": auto_merge_enabled,
+            "auto_merge_applied": auto_merge_applied,
+            "auto_merge_threshold": auto_merge_threshold,
+            "auto_merge_replaced_chunks": auto_merge_replaced_chunks,
+            "auto_merge_steps": auto_merge_steps,
+        }
+    )
     return {"docs": deduped, "context": context, "rag_trace": rag_trace}
 
 
@@ -389,16 +397,18 @@ rag_graph = build_rag_graph()
 
 
 def run_rag_graph(question: str) -> dict:
-    return rag_graph.invoke({
-        "question": question,
-        "query": question,
-        "context": "",
-        "docs": [],
-        "route": None,
-        "expansion_type": None,
-        "expanded_query": None,
-        "step_back_question": None,
-        "step_back_answer": None,
-        "hypothetical_doc": None,
-        "rag_trace": None,
-    })
+    return rag_graph.invoke(
+        {
+            "question": question,
+            "query": question,
+            "context": "",
+            "docs": [],
+            "route": None,
+            "expansion_type": None,
+            "expanded_query": None,
+            "step_back_question": None,
+            "step_back_answer": None,
+            "hypothetical_doc": None,
+            "rag_trace": None,
+        }
+    )

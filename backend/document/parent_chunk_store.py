@@ -1,4 +1,5 @@
 """父级分块文档存储（用于 Auto-merging Retriever）"""
+
 from datetime import datetime
 from typing import List
 

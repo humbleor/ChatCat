@@ -1,9 +1,13 @@
 """文档加载和分片服务"""
+
 import os
 from typing import Dict, List
+
+from langchain_community.document_loaders import Docx2txtLoader, PyPDFLoader, UnstructuredExcelLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader, UnstructuredExcelLoader
-from backend.document.text_sanitizer import sanitize_text, sanitize_metadata
+
+from backend.document.text_sanitizer import sanitize_metadata, sanitize_text
+
 
 class DocumentLoader:
     """文档加载和分片服务"""
@@ -113,15 +117,17 @@ class DocumentLoader:
                         continue
                     level_3_id = self._build_chunk_id(filename, page_number, 3, level_3_counter)
                     level_3_counter += 1
-                    root_chunks.append({
-                        **base_doc,
-                        "text": level_3_text,
-                        "chunk_id": level_3_id,
-                        "parent_chunk_id": level_2_id,
-                        "root_chunk_id": level_1_id,
-                        "chunk_level": 3,
-                        "chunk_idx": page_global_chunk_idx,
-                    })
+                    root_chunks.append(
+                        {
+                            **base_doc,
+                            "text": level_3_text,
+                            "chunk_id": level_3_id,
+                            "parent_chunk_id": level_2_id,
+                            "root_chunk_id": level_1_id,
+                            "chunk_level": 3,
+                            "chunk_idx": page_global_chunk_idx,
+                        }
+                    )
                     page_global_chunk_idx += 1
 
         return root_chunks
@@ -160,7 +166,7 @@ class DocumentLoader:
                     page_num = int(page_num)
                 except (TypeError, ValueError):
                     page_num = 0
-                
+
                 base_doc = {
                     "filename": sanitize_metadata(filename),
                     "file_path": sanitize_metadata(file_path),

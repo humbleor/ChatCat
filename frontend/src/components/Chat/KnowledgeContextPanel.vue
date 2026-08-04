@@ -42,10 +42,7 @@
       </section>
 
       <section class="context-card confidence-card">
-        <div
-          class="confidence-ring"
-          :style="{ '--confidence': (confidence ?? 0) + '%' }"
-        >
+        <div class="confidence-ring" :style="{ '--confidence': (confidence ?? 0) + '%' }">
           <strong>{{ confidence === null ? '—' : confidence + '%' }}</strong>
         </div>
         <div>
@@ -138,11 +135,13 @@ const runSteps = computed<RunStepView[]>(() => {
 
   const currentTrace = trace.value;
   if (!currentTrace) {
-    return [{
-      key: 'answer',
-      label: isRunning.value ? '正在连接喵喵 Agent' : '直接回答已完成',
-      detail: isRunning.value ? '准备理解问题与选择工具' : '本次未产生检索轨迹',
-    }];
+    return [
+      {
+        key: 'answer',
+        label: isRunning.value ? '正在连接喵喵 Agent' : '直接回答已完成',
+        detail: isRunning.value ? '准备理解问题与选择工具' : '本次未产生检索轨迹',
+      },
+    ];
   }
 
   const result: RunStepView[] = [];
@@ -199,10 +198,7 @@ const confidenceDescription = computed(() => {
 });
 
 const totalDuration = computed(() => {
-  const total = (latestMessage.value?.ragSteps || []).reduce(
-    (sum, step) => sum + Number(step.elapsed_ms || 0),
-    0
-  );
+  const total = (latestMessage.value?.ragSteps || []).reduce((sum, step) => sum + Number(step.elapsed_ms || 0), 0);
   return total > 0 ? formatMilliseconds(total) : '';
 });
 

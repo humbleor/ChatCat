@@ -46,10 +46,7 @@ describe('document upload polling', () => {
   });
 
   it('does not stop upload polling when the settings view unmounts', () => {
-    const source = readFileSync(
-      new URL('../components/Documents/DocumentSettings.vue', import.meta.url),
-      'utf8'
-    );
+    const source = readFileSync(new URL('../components/Documents/DocumentSettings.vue', import.meta.url), 'utf8');
     const unmountedBlock = source.match(/onUnmounted\(\(\) => \{([\s\S]*?)\}\);/);
 
     expect(unmountedBlock?.[1]).not.toContain('stopUploadJobPolling');
@@ -108,8 +105,6 @@ describe('document upload polling', () => {
     expect(store.isUploading).toBe(false);
     expect(store.selectedFile).toBeNull();
     expect(store.uploadPollTimer).toBeNull();
-    expect(store.documents).toEqual([
-      { filename: 'wuthering-waves.pdf', file_type: 'PDF', chunk_count: 770 },
-    ]);
+    expect(store.documents).toEqual([{ filename: 'wuthering-waves.pdf', file_type: 'PDF', chunk_count: 770 }]);
   });
 });

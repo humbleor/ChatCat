@@ -1,7 +1,5 @@
 <template>
-  <div
-    :class="['message', msg.isUser ? 'user-message' : 'bot-message']"
-  >
+  <div :class="['message', msg.isUser ? 'user-message' : 'bot-message']">
     <div v-if="!msg.isUser" class="message-avatar" aria-hidden="true">
       <i class="fa-solid fa-cat"></i>
     </div>
@@ -19,25 +17,11 @@
       </template>
 
       <template v-else>
-        <ThinkingTrace
-          v-if="msg.isThinking && !msg.text"
-          :msg="msg"
-          :msg-index="msgIndex"
-        />
+        <ThinkingTrace v-if="msg.isThinking && !msg.text" :msg="msg" :msg-index="msgIndex" />
 
         <template v-else>
-          <MessageContent
-            :text="msg.text"
-            :is-user="false"
-            :msg-index="msgIndex"
-            @cite-click="onCiteClick"
-          />
-          <References
-            ref="referencesRef"
-            :msg="msg"
-            :msg-index="msgIndex"
-            @cite-click="onCiteClick"
-          />
+          <MessageContent :text="msg.text" :is-user="false" :msg-index="msgIndex" @cite-click="onCiteClick" />
+          <References ref="referencesRef" :msg="msg" :msg-index="msgIndex" @cite-click="onCiteClick" />
           <RetrievalTraceDetails :msg="msg" />
         </template>
       </template>

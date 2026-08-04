@@ -68,7 +68,7 @@ const handleUnauthorized = () => {
 
 onMounted(async () => {
   window.addEventListener('unauthorized', handleUnauthorized);
-  
+
   if (authStore.token) {
     try {
       await authStore.fetchMe();

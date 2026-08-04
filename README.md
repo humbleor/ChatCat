@@ -79,3 +79,66 @@ npm run build
 浏览器访问：
 - 前端页面：`http://127.0.0.1:8000/`
 - API 文档：`http://127.0.0.1:8000/docs`
+
+## 代码格式化 / Lint
+
+前后端已统一配置代码风格工具，规则如下：
+
+| 端 | 格式化 | Lint |
+|----|--------|------|
+| 后端（Python） | ruff format / black | ruff check |
+| 前端（Vue 3 + TS） | Prettier | ESLint |
+
+行宽统一为 `120`。所有命令在项目根目录（后端）或 `frontend/`（前端）下执行。
+
+### 后端（Python）
+
+配置位于根目录 `pyproject.toml`（`[tool.ruff]` / `[tool.black]`）。
+
+```bash
+# 格式化（ruff format 与 black 风格一致，二选一）
+uv run ruff format backend tests
+# 或
+uv run black backend tests
+
+# Lint 检查 + 自动修复（import 排序、未用变量等）
+uv run ruff check --fix backend tests
+
+# 只检查不修改
+uv run ruff check backend tests
+uv run ruff format --check backend tests
+```
+
+也可以用全项目范围（`frontend/`、`data/` 已在配置中排除，`.venv` 默认跳过）：
+
+```bash
+uv run ruff format .
+uv run ruff check --fix .
+```
+
+### 前端（Vue 3 + TypeScript）
+
+配置位于 `frontend/eslint.config.js` 与 `frontend/.prettierrc`。
+
+```bash
+cd frontend
+
+# 格式化（Prettier）
+npm run format         # prettier --write .（全量格式化）
+npm run format:check   # prettier --check .（仅检查，适合 CI）
+
+# Lint（ESLint）
+npm run lint           # eslint .（检查）
+npm run lint:fix       # eslint --fix .（检查 + 自动修复）
+```
+
+建议的提交前流程：
+
+```bash
+# 后端
+uv run ruff format backend tests
+uv run ruff check --fix backend tests
+
+# 前端
+cd frontend && npm run format && npm run lint:fix
+```

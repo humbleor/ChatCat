@@ -12,7 +12,7 @@
     </div>
 
     <div v-if="waitingHint" class="thinking-hint">{{ waitingHint }}</div>
-    
+
     <div v-if="msg.ragSteps && msg.ragSteps.length" class="thinking-trace-lines">
       <template v-for="(grp, gIdx) in msg._groupedSteps" :key="grp.group || `main-${gIdx}`">
         <!-- 子 Agent 分组：带标题可折叠 -->
@@ -27,11 +27,13 @@
               <span class="thinking-trace-icon">{{ step.icon || '▶' }}</span>
               <span class="thinking-trace-label">{{ step.label }}</span>
               <span v-if="step.detail" class="thinking-trace-detail">{{ step.detail }}</span>
-              <span v-if="step.elapsed_ms != null" class="thinking-trace-time">{{ formatElapsed(step.elapsed_ms) }}</span>
+              <span v-if="step.elapsed_ms != null" class="thinking-trace-time">{{
+                formatElapsed(step.elapsed_ms)
+              }}</span>
             </div>
           </div>
         </div>
-        
+
         <!-- 普通步骤：直接展示 -->
         <template v-else>
           <div v-for="(step, sIdx) in grp.steps" :key="'s' + gIdx + '-' + sIdx" class="thinking-trace-line">

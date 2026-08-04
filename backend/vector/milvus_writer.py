@@ -1,5 +1,7 @@
 """文档向量化并写入 Milvus - 稀疏向量由服务端 BM25 Function 自动生成"""
-from backend.vector.embedding import EmbeddingService, embedding_service as _default_embedding_service
+
+from backend.vector.embedding import EmbeddingService
+from backend.vector.embedding import embedding_service as _default_embedding_service
 from backend.vector.milvus_client import MilvusStore, get_milvus_store
 
 
@@ -23,7 +25,7 @@ class MilvusWriter:
 
         total = len(documents)
         for i in range(0, total, batch_size):
-            batch = documents[i:i + batch_size]
+            batch = documents[i : i + batch_size]
             texts = [doc["text"] for doc in batch]
 
             # 只生成密集向量；sparse_embedding 字段不能手动提供（BM25 function 自动生成）
