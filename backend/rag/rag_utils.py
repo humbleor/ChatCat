@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from backend.vector.milvus_client import get_milvus_store
 from backend.vector.embedding import embedding_service as _embedding_service
 from backend.document.parent_chunk_store import ParentChunkStore
+from backend.document.text_sanitizer import sanitize_text
 from langchain.chat_models import init_chat_model
 
 load_dotenv()
@@ -243,6 +244,7 @@ def step_back_expand(query: str) -> dict:
 
 
 def retrieve_documents(query: str, top_k: int = 5) -> Dict[str, Any]:
+    query = sanitize_text(query)
     candidate_k = max(top_k * 3, top_k)
     filter_expr = f"chunk_level == {LEAF_RETRIEVE_LEVEL}"
     try:

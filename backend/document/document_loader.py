@@ -3,6 +3,7 @@ import os
 from typing import Dict, List
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader, UnstructuredExcelLoader
+from backend.document.text_sanitizer import sanitize_text, sanitize_metadata
 
 class DocumentLoader:
     """文档加载和分片服务"""
@@ -39,6 +40,7 @@ class DocumentLoader:
     def _build_chunk_id(filename: str, page_number: int, level: int, index: int) -> str:
         return f"{filename}::p{page_number}::l{level}::{index}"
 
+    @staticmethod
     def _is_supported_document(filename: str) -> bool:
         file_lower = filename.lower()
         return (
@@ -150,14 +152,23 @@ class DocumentLoader:
             documents = []
             page_global_chunk_idx = 0
             for doc in raw_docs:
+                meta = getattr(doc, "metadata", None) or {}
+                page_num = meta.get("page", 0)
+                if page_num is None:
+                    page_num = 0
+                try:
+                    page_num = int(page_num)
+                except (TypeError, ValueError):
+                    page_num = 0
+                
                 base_doc = {
-                    "filename": filename,
-                    "file_path": file_path,
-                    "file_type": doc_type,
-                    "page_number": doc.metadata.get("page", 0),
+                    "filename": sanitize_metadata(filename),
+                    "file_path": sanitize_metadata(file_path),
+                    "file_type": sanitize_metadata(doc_type),
+                    "page_number": page_num,
                 }
                 page_chunks = self._split_page_to_three_levels(
-                    text=(doc.page_content or "").strip().replace("\x00", ""),
+                    text=sanitize_text((doc.page_content or "").strip()),
                     base_doc=base_doc,
                     page_global_chunk_idx=page_global_chunk_idx,
                 )

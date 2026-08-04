@@ -35,8 +35,8 @@
       </article>
       <article>
         <span>支持格式</span>
-        <strong>5</strong>
-        <small>PDF · Word · Excel · HTML</small>
+        <strong>3</strong>
+        <small>PDF · Word · Excel</small>
       </article>
     </section>
 
