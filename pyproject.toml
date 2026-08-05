@@ -21,6 +21,7 @@ dependencies = [
     "langchain-openai>=0.1.22",
     "sentence-transformers>=3.0.0",
     "langgraph>=0.2.31",
+    "langgraph-checkpoint-postgres>=2.0.0",
     "pypdf>=4.3.1",
     "docx2txt>=0.8",
     "unstructured",
@@ -29,6 +30,7 @@ dependencies = [
     "msoffcrypto-tool",
     "sqlalchemy>=2.0.36",
     "psycopg2-binary>=2.9.10",
+    "psycopg[binary]>=3.1.0",
     "redis>=5.2.1",
     "passlib[bcrypt]>=1.7.4",
     "python-jose[cryptography]>=3.3.0",
@@ -39,6 +41,8 @@ dependencies = [
 dev = [
     "black>=24.0.0",
     "ruff>=0.6.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
 ]
 
 [tool.ruff]
@@ -76,3 +80,8 @@ extend-exclude = '''
   | data
 )/
 '''
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+asyncio_mode = "auto"
+testpaths = ["tests"]
