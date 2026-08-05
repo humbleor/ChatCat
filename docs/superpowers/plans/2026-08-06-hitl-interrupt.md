@@ -13,6 +13,7 @@
 - 后端命令一律在 WSL 内执行（`wsl -d Ubuntu-20.04 bash -ic "cd /home/mspace/code/ChatCat && ..."`）。前端命令同理。
 - 关键 import（已实测，勿改动）：`from langgraph.types import interrupt, Command`；`from langgraph.config import get_stream_writer`；`Command` 不在 `langgraph.graph`。
 - `interrupt` 通过 `astream`/`stream` 时**流静默结束**（不产生 `__interrupt__` 事件）；中断检测一律用 `graph.get_state(config)`：`snap.tasks[0].interrupts[0].value`。
+- **resume 时被中断的节点会从头重跑**：`detect_fn` 每轮 HITL 会多执行一次（重入那次），检测逻辑必须对同输入确定（router temperature=0）才能保证 resume 到达 `interrupt()` 并返回用户补充。
 - 图节点全部为**同步**函数（含 `generate` 用 `model.stream`），避免 async 节点在 executor 里的 contextvar 丢失问题。
 - 保留现有 append-only `ConversationStorage`、token 级 `_manage_context_window`、`_CACHE_VERSION="v2"`；不采用片段二全删全插。
 - 保留 `backend/rag/rag_pipeline.py` 的 `run_rag_graph` 原样，`retrieve` 节点直接调用它。
@@ -513,22 +514,24 @@ def _always_no_hitl(question, docs, router_model=None):
 
 
 def _hitl_once(decision):
+    # LangGraph resume 时被中断节点从头重跑，detect 每轮 HITL 多执行一次（第 2 次为重入）
     calls = {"n": 0}
 
     def detect(question, docs, router_model=None):
         calls["n"] += 1
-        if calls["n"] == 1:
+        if calls["n"] <= 2:
             return decision
         return HitlDecision(needs_hitl=False)
 
     return detect
 
 
-def _build(retrieve_fn=_fake_retrieve, detect_fn=_always_no_hitl, generate_fn=_fake_generate):
+def _build(retrieve_fn=_fake_retrieve, detect_fn=_always_no_hitl, generate_fn=_fake_generate, weather_fn=None):
     return build_chat_graph(
         retrieve_fn=retrieve_fn,
         detect_fn=detect_fn,
         generate_fn=generate_fn,
+        weather_fn=weather_fn,
         checkpointer=InMemorySaver(),
     )
 
@@ -568,8 +571,9 @@ def test_nested_hitl_then_resolves():
     calls = {"n": 0}
 
     def detect(question, docs, router_model=None):
+        # 两轮 HITL × 每次重入，共 4 次命中
         calls["n"] += 1
-        if calls["n"] <= 2:
+        if calls["n"] <= 4:
             return decision
         return HitlDecision(needs_hitl=False)
 
@@ -908,6 +912,7 @@ def build_chat_graph(
     g.add_edge("weather", "generate")
     g.add_edge("generate", END)
     return g.compile(checkpointer=checkpointer or InMemorySaver())
+```
 
 - [ ] **Step 4: 跑测试确认通过**
 
@@ -920,8 +925,14 @@ Expected: PASS。重点断言：
 
 追加一个临时断言测试（保留为正式用例）：
 ```python
+def _fake_retrieve_with_step(state):
+    from langgraph.config import get_stream_writer
+    get_stream_writer()({"type": "rag_step", "step": {"icon": "🔍", "label": "检索"}})
+    return {"docs": [{"filename": "销售.md", "text": "t", "page_number": 1}], "context": "t", "rag_trace": {"retrieval_status": "ok"}}
+
+
 def test_custom_events_from_sync_stream():
-    graph = build_chat_graph(retrieve_fn=_fake_retrieve, generate_fn=lambda s: s, checkpointer=InMemorySaver())
+    graph = build_chat_graph(retrieve_fn=_fake_retrieve_with_step, generate_fn=lambda s: s, checkpointer=InMemorySaver())
     events = [d for _k, d in graph.stream(
         {"user_text": "hi", "original_question": "", "question": "", "answers": [],
          "persistent_note": "", "history": [], "mode": "", "phase": "", "docs": [], "context": "",
@@ -1141,7 +1152,12 @@ def chat_with_agent(user_text: str, user_id: str = "default_user", session_id: s
         rag_trace = normalize_rag_trace(final_snap.values.get("rag_trace") if hasattr(final_snap, "values") else None)
         messages.append(AIMessage(content=hitl_text))
         extra = [None] * (len(messages) - 1) + [{"rag_trace": rag_trace}]
-        storage.save(user_id, session_id, messages, metadata={"title": _title_for(metadata, is_first_message, user_text)}, extra_message_data=extra)
+        # 合并进现有 metadata，避免整体覆盖清掉 persistent_note
+        save_meta = dict(metadata)
+        title = _title_for(metadata, is_first_message, user_text)
+        if title:
+            save_meta["title"] = title
+        storage.save(user_id, session_id, messages, metadata=save_meta, extra_message_data=extra)
         return {"response": hitl_text, "rag_trace": rag_trace, "hitl": hitl_value}
 
     rag_trace = normalize_rag_trace(final_snap.values.get("rag_trace") if hasattr(final_snap, "values") else None)
@@ -1311,6 +1327,13 @@ def _should_update_persistent_note(messages: list, current_note: str) -> bool:
 def generate_session_title(user_text: str) -> str:
     compact_title = " ".join(user_text.split()).strip(" \t\r\n。！？!?，,；;：:")
     return compact_title[:16] or "新会话"
+
+
+def _title_for(metadata: dict, is_first_message: bool, user_text: str) -> str | None:
+    """首条消息生成标题；否则沿用已有标题（避免整体覆盖 metadata_json）。"""
+    if is_first_message:
+        return generate_session_title(user_text)
+    return metadata.get("title")
 
 
 async def update_persistent_note(current_note, user_text, ai_response, history_messages=None):
