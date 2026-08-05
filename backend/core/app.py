@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from backend.api import api as api_module
+from backend.infra.checkpointer import init_checkpointer
 from backend.infra.database import init_db
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -18,6 +19,7 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     async def _startup_init_db():
         init_db()
+        init_checkpointer()
 
     app.add_middleware(
         CORSMiddleware,
