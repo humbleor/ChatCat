@@ -45,6 +45,17 @@ dev = [
     "pytest-asyncio>=0.23.0",
 ]
 
+# uv 0.11+ 裸 `uv sync` 默认不安装 extras，只安装 dependency-groups。
+# 为保证 `uv sync`（CLAUDE.md 标准命令）即装好 dev 工具链（pytest 等），
+# 这里用 dependency-groups 声明与上方 optional-dependencies.dev 相同的包。
+[dependency-groups]
+dev = [
+    "black>=24.0.0",
+    "ruff>=0.6.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+]
+
 [tool.ruff]
 line-length = 120
 target-version = "py312"
