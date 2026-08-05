@@ -32,6 +32,10 @@ class ChatRequest(BaseModel):
     session_id: Optional[str] = "default_session"
 
 
+class HitlCancelRequest(BaseModel):
+    session_id: Optional[str] = "default_session"
+
+
 class RetrievedChunk(BaseModel):
     filename: str
     page_number: Optional[str | int] = None

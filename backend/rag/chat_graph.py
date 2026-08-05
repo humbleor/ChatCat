@@ -3,6 +3,7 @@
 HITL 用 LangGraph 原生 interrupt/Command(resume)；节点全同步，RAG 步骤与内容
 通过 get_stream_writer() 发 custom 事件，供编排层转 SSE。
 """
+import re
 from typing import Callable, Optional, TypedDict
 
 from langgraph.config import get_stream_writer
@@ -187,10 +188,69 @@ def _make_check_hitl(detect_fn: Callable):
     return check_hitl
 
 
+# ---------- 天气城市名提取 ----------
+_LEADING_NOISE_RE = re.compile(
+    r"^(?:请问|麻烦|帮我|帮我查|查一?下|看看|看下|一下|今天|明天|后天|昨天|现在|想知道|我想)+"
+)
+_FAST_LOC_RE = re.compile(
+    r"^([一-鿿]{2,6}?)(?:的)?(?:今天|明天|后天|昨天|现在|天气|气温|温度|下雨|下雪|风力|风向|湿度|预报)"
+)
+
+
+def _extract_location_fast(question: str) -> Optional[str]:
+    """快速路径：只处理「城市 + 天气/时间词」这种直白句式，复杂句式交给 LLM。"""
+    q = _LEADING_NOISE_RE.sub("", question.strip())
+    m = _FAST_LOC_RE.match(q)
+    if not m:
+        return None
+    loc = m.group(1)
+    # 只接受典型城市/省份名长度（含 市/省/区/县 后缀最多 5 字），拒绝多地名并列等复杂情形
+    if 2 <= len(loc) <= 5 and not any(c in loc for c in "和与及、，,"):
+        return loc
+    return None
+
+
+def _extract_location_llm(question: str, router_model) -> Optional[str]:
+    """LLM 兜底：用已加载的 router 模型一次性抽取城市名（只回城市名或 NONE）。"""
+    try:
+        prompt = (
+            "从以下天气查询中提取城市名。只输出城市名本身（例如：武汉），不要任何解释。"
+            "如果查询中没有明确的城市名，只输出 NONE。\n"
+            f"查询：{question}"
+        )
+        res = router_model.invoke([{"role": "user", "content": prompt}])
+        text = str(getattr(res, "content", "") or "").strip()
+        if not text:
+            return None
+        first_line = text.splitlines()[0].strip()
+        if first_line.upper() == "NONE":
+            return None
+        first_line = first_line.strip("。.,，:： \t")
+        return first_line if 1 <= len(first_line) <= 8 else None
+    except Exception:
+        return None
+
+
+def _extract_location(question: str, router_model) -> str:
+    """从问句中提取城市名。返回城市名；无法识别返回空字符串。"""
+    loc = _extract_location_fast(question)
+    if loc:
+        return loc
+    if router_model is not None:
+        loc = _extract_location_llm(question, router_model)
+        if loc:
+            return loc
+    return ""
+
+
 def weather_node(state: ChatState) -> dict:
     from backend.agent.tools import get_current_weather
+    from backend.rag.rag_pipeline import _get_router_model
 
-    result = get_current_weather(state["question"])
+    location = _extract_location(state["question"], _get_router_model())
+    if not location:
+        return {"weather_result": "无法识别查询中的城市", "phase": "generate"}
+    result = get_current_weather.func(location, extensions="base")
     return {"weather_result": result, "phase": "generate"}
 
 

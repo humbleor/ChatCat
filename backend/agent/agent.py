@@ -613,7 +613,7 @@ async def chat_with_agent_stream(
 
     cfg = _session_thread_config(user_id, session_id)
     graph = build_chat_graph(checkpointer=get_checkpointer())
-    snap = await graph.aget_state(cfg)
+    snap = await asyncio.to_thread(graph.get_state, cfg)
     pending = bool(snap.tasks and getattr(snap.tasks[0], "interrupts", None))
 
     input_data = (
@@ -666,7 +666,7 @@ async def chat_with_agent_stream(
         if not task.done():
             task.cancel()
 
-    snap = await graph.aget_state(cfg)
+    snap = await asyncio.to_thread(graph.get_state, cfg)
     hitl_value = None
     if snap.tasks and getattr(snap.tasks[0], "interrupts", None):
         hitl_value = snap.tasks[0].interrupts[0].value
