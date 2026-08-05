@@ -4,6 +4,7 @@
 - needs_scope_selection：检索结果按 filename 聚类，多簇即触发。
 - no_knowledge：docs 为空。
 """
+import os
 from dataclasses import dataclass
 from typing import Optional
 
@@ -89,7 +90,11 @@ def _cluster_docs(docs: list[dict]) -> dict[str, int]:
 
 def _detect_scope(docs: list[dict]) -> Optional[HitlDecision]:
     counts = _cluster_docs(docs)
-    qualified = [name for name, n in counts.items() if n >= _MIN_CLUSTER_SIZE]
+    qualified = [
+        os.path.splitext(name)[0] or name
+        for name, n in counts.items()
+        if n >= _MIN_CLUSTER_SIZE
+    ]
     if len(qualified) < 2:
         return None
     prompt = "我找到了多个可能相关的知识库方向，请选择你想继续查询的方向。"
