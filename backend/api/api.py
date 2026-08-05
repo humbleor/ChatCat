@@ -189,6 +189,7 @@ async def cancel_hitl(request: HitlCancelRequest, current_user: User = Depends(g
     """放弃当前 HITL 追问：删除该会话的 checkpoint 线程，下一条消息走新问题。"""
     from backend.agent.agent import _session_thread_config
     from backend.infra.checkpointer import get_checkpointer
+
     try:
         cfg = _session_thread_config(current_user.username, request.session_id or "default_session")
         # langgraph-checkpoint-postgres 的 delete_thread 签名是 (thread_id: str)；

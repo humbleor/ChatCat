@@ -3,6 +3,7 @@
 同步版 `chat_with_agent` 与流式版 `chat_with_agent_stream` 共享
 「跑图 + 收事件 + 收尾持久化」的同一套逻辑。
 """
+
 import asyncio
 import json
 import logging
@@ -462,9 +463,7 @@ async def update_persistent_note(current_note, user_text, ai_response, history_m
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(
         None,
-        lambda: _update_persistent_note_sync(
-            current_note, user_text, ai_response, history_messages=history_messages
-        ),
+        lambda: _update_persistent_note_sync(current_note, user_text, ai_response, history_messages=history_messages),
     )
 
 
@@ -472,13 +471,8 @@ def _update_persistent_note_sync(current_note, user_text, ai_response, *, histor
     try:
         history_text = ""
         if history_messages:
-            lines = [
-                f"{'用户' if isinstance(m, HumanMessage) else 'AI'}：{str(m.content)}"
-                for m in history_messages
-            ]
-            history_text = (
-                "\n\n▼ 首次建立笔记时需要一并概括的此前对话：\n" + "\n".join(lines) + "\n\n"
-            )
+            lines = [f"{'用户' if isinstance(m, HumanMessage) else 'AI'}：{str(m.content)}" for m in history_messages]
+            history_text = "\n\n▼ 首次建立笔记时需要一并概括的此前对话：\n" + "\n".join(lines) + "\n\n"
         prompt = (
             "你是一个【Context Manager Agent】，负责维护多轮对话中的「持久化笔记」。\n"
             "笔记是模型在有限上下文窗口下的长效工作记忆，记录已解决的问题与关键事实。\n\n"
@@ -593,9 +587,7 @@ def chat_with_agent(user_text: str, user_id: str = "default_user", session_id: s
     return {"response": full_response, "rag_trace": rag_trace}
 
 
-async def chat_with_agent_stream(
-    user_text: str, user_id: str = "default_user", session_id: str = "default_session"
-):
+async def chat_with_agent_stream(user_text: str, user_id: str = "default_user", session_id: str = "default_session"):
     """流式驱动图：把整轮跑进线程，将 custom 事件经 asyncio.Queue 转发为 SSE。"""
     yield f"data: {json.dumps({'type': 'rag_step', 'step': {'icon': '📨', 'label': '请求已接收，正在准备回答'}})}\n\n"
 

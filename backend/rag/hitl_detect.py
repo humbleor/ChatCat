@@ -4,6 +4,7 @@
 - needs_scope_selection：检索结果按 filename 聚类，多簇即触发。
 - no_knowledge：docs 为空。
 """
+
 import os
 from dataclasses import dataclass
 from typing import Optional
@@ -90,11 +91,7 @@ def _cluster_docs(docs: list[dict]) -> dict[str, int]:
 
 def _detect_scope(docs: list[dict]) -> Optional[HitlDecision]:
     counts = _cluster_docs(docs)
-    qualified = [
-        os.path.splitext(name)[0] or name
-        for name, n in counts.items()
-        if n >= _MIN_CLUSTER_SIZE
-    ]
+    qualified = [os.path.splitext(name)[0] or name for name, n in counts.items() if n >= _MIN_CLUSTER_SIZE]
     if len(qualified) < 2:
         return None
     prompt = "我找到了多个可能相关的知识库方向，请选择你想继续查询的方向。"
@@ -110,9 +107,7 @@ def _detect_scope(docs: list[dict]) -> Optional[HitlDecision]:
 def detect_hitl(question: str, docs: list[dict], router_model=None) -> HitlDecision:
     """混合判定。router_model 为 None 时仅走启发式（澄清检测跳过）。"""
     if not docs:
-        return HitlDecision(
-            needs_hitl=False, route="", retrieval_status="no_knowledge"
-        )
+        return HitlDecision(needs_hitl=False, route="", retrieval_status="no_knowledge")
 
     scope = _detect_scope(docs)
     if scope is not None:

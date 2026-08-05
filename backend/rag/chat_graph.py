@@ -3,6 +3,7 @@
 HITL 用 LangGraph 原生 interrupt/Command(resume)；节点全同步，RAG 步骤与内容
 通过 get_stream_writer() 发 custom 事件，供编排层转 SSE。
 """
+
 import re
 from typing import Callable, Optional, TypedDict
 
@@ -156,6 +157,7 @@ def _default_detect(question: str, docs: list[dict], router_model=None) -> HitlD
 def _make_check_hitl(detect_fn: Callable):
     """构造 check_hitl 节点。detect_fn 注入（测试传 fake，生产传 _default_detect），
     interrupt 逻辑唯一一份，避免 DRY 破坏。"""
+
     def check_hitl(state: ChatState) -> dict:
         from backend.rag.hitl_detect import MAX_HITL_ROUNDS
 
@@ -298,7 +300,11 @@ def generate(state: ChatState) -> dict:
     else:
         messages = []
         if state["persistent_note"]:
-            messages.append(SystemMessage(content=f"【对话持久化笔记（你的工作记忆）】\n{state['persistent_note']}\n请参考以上笔记保持对话连贯性。"))
+            messages.append(
+                SystemMessage(
+                    content=f"【对话持久化笔记（你的工作记忆）】\n{state['persistent_note']}\n请参考以上笔记保持对话连贯性。"
+                )
+            )
         messages.extend(_history_to_messages(state["history"]))
         messages.append(HumanMessage(content=state["question"]))
 
