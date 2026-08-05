@@ -31,6 +31,17 @@ def _fake_retrieve(state):
     }
 
 
+def _fake_retrieve_with_step(state):
+    from langgraph.config import get_stream_writer
+
+    get_stream_writer()({"type": "rag_step", "step": {"icon": "🔍", "label": "检索"}})
+    return {
+        "docs": [{"filename": "销售.md", "text": "t", "page_number": 1}],
+        "context": "t",
+        "rag_trace": {"retrieval_status": "ok"},
+    }
+
+
 def _fake_generate(state):
     return {"response": f"回答:{state['question']}"}
 
@@ -44,18 +55,19 @@ def _hitl_once(decision):
 
     def detect(question, docs, router_model=None):
         calls["n"] += 1
-        if calls["n"] == 1:
+        if calls["n"] <= 2:
             return decision
         return HitlDecision(needs_hitl=False)
 
     return detect
 
 
-def _build(retrieve_fn=_fake_retrieve, detect_fn=_always_no_hitl, generate_fn=_fake_generate):
+def _build(retrieve_fn=_fake_retrieve, detect_fn=_always_no_hitl, generate_fn=_fake_generate, weather_fn=None):
     return build_chat_graph(
         retrieve_fn=retrieve_fn,
         detect_fn=detect_fn,
         generate_fn=generate_fn,
+        weather_fn=weather_fn,
         checkpointer=InMemorySaver(),
     )
 
@@ -96,7 +108,7 @@ def test_nested_hitl_then_resolves():
 
     def detect(question, docs, router_model=None):
         calls["n"] += 1
-        if calls["n"] <= 2:
+        if calls["n"] <= 4:
             return decision
         return HitlDecision(needs_hitl=False)
 
@@ -133,7 +145,11 @@ def test_weather_route_skips_retrieve():
 
 
 def test_custom_events_from_sync_stream():
-    graph = build_chat_graph(retrieve_fn=_fake_retrieve, generate_fn=lambda s: s, checkpointer=InMemorySaver())
+    graph = build_chat_graph(
+        retrieve_fn=_fake_retrieve_with_step,
+        generate_fn=lambda s: s,
+        checkpointer=InMemorySaver(),
+    )
     events = [d for _k, d in graph.stream(
         {"user_text": "hi", "original_question": "", "question": "", "answers": [],
          "persistent_note": "", "history": [], "mode": "", "phase": "", "docs": [], "context": "",
