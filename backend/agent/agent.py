@@ -451,11 +451,11 @@ def generate_session_title(user_text: str) -> str:
     return compact_title[:16] or "新会话"
 
 
-def _title_for(metadata: dict, is_first_message: bool, user_text: str) -> str:
-    """HITL 分支保存会话元数据时用的标题：首轮生成新标题，否则沿用已有标题。"""
+def _title_for(metadata: dict, is_first_message: bool, user_text: str) -> str | None:
+    """首条消息生成标题；否则沿用已有标题（避免覆盖 metadata_json）。"""
     if is_first_message:
         return generate_session_title(user_text)
-    return metadata.get("title") or ""
+    return metadata.get("title")
 
 
 async def update_persistent_note(current_note, user_text, ai_response, history_messages=None):
@@ -568,8 +568,11 @@ def chat_with_agent(user_text: str, user_id: str = "default_user", session_id: s
         rag_trace = normalize_rag_trace(final_snap.values.get("rag_trace") if hasattr(final_snap, "values") else None)
         messages.append(AIMessage(content=hitl_text))
         extra = [None] * (len(messages) - 1) + [{"rag_trace": rag_trace}]
-        hitl_save_meta = {"title": _title_for(metadata, is_first_message, user_text)}
-        storage.save(user_id, session_id, messages, metadata=hitl_save_meta, extra_message_data=extra)
+        save_meta = dict(metadata)
+        title = _title_for(metadata, is_first_message, user_text)
+        if title:
+            save_meta["title"] = title
+        storage.save(user_id, session_id, messages, metadata=save_meta, extra_message_data=extra)
         return {"response": hitl_text, "rag_trace": rag_trace, "hitl": hitl_value}
 
     rag_trace = normalize_rag_trace(final_snap.values.get("rag_trace") if hasattr(final_snap, "values") else None)
