@@ -1,3 +1,8 @@
+"""聊天编排层：驱动统一 StateGraph（HITL + 持久化笔记 + 标题）完成一轮对话。
+
+同步版 `chat_with_agent` 与流式版 `chat_with_agent_stream` 共享
+「跑图 + 收事件 + 收尾持久化」的同一套逻辑。
+"""
 import asyncio
 import json
 import logging
@@ -5,47 +10,41 @@ import os
 from datetime import datetime
 
 from dotenv import load_dotenv
-from langchain.agents import create_agent
-from langchain.chat_models import init_chat_model
-from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langgraph.types import Command
 
-from backend.agent.tools import (
-    get_current_weather,
-    get_last_rag_context,
-    reset_tool_call_guards,
-    search_knowledge_base,
-    set_rag_step_queue,
-)
 from backend.infra.cache import cache
 from backend.infra.database import SessionLocal
 from backend.models.models import ChatMessage, ChatSession, User
-from backend.rag.hitl_detect import normalize_rag_trace
+from backend.rag.hitl_detect import format_hitl_message, normalize_rag_trace
 
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-API_KEY = os.getenv("LLM_API_KEY")
-MODEL = os.getenv("LLM_MODEL")
-BASE_URL = os.getenv("LLM_BASE_URL")
+# ---------- 快模型（笔记维护等轻任务） ----------
+_fast_model = None
 
 
-def get_system_prompt() -> str:
-    prompt = """You are a cute cat bot eager to assist users.
-You may invoke tools for responses:
-- Call get_current_weather for weather inquiries.
-- Call search_knowledge_base for document & knowledge questions.
+def _get_fast_model():
+    """笔记/标题等轻任务用的廉价快模型（LLM_FAST_MODEL，缺省 LLM_MODEL）。"""
+    global _fast_model
+    if _fast_model is None:
+        from langchain.chat_models import init_chat_model
 
-Rules:
-1. Do not invoke the same tool repeatedly in one turn; maximum one knowledge tool call per turn.
-2. After receiving results from search_knowledge_base, generate the final answer immediately. No further tool calls of any kind.
-3. If tool output begins with NEEDS_CLARIFICATION / NEEDS_SCOPE_SELECTION: directly ask the user, do not use retrieved content to answer.
-4. If tool output starts with NO_KNOWLEDGE: state the knowledge base has no reliable relevant information.
-5. If retrieved context is inadequate, honestly admit ignorance; never fabricate facts.
-6. When answering from retrieved chunks, cite source indexes inline like [1] or [2][3].
-7. Step-back questions and HyDE texts are only retrieval aids, not factual sources. All factual statements must rely solely on retrieved chunks.
-8. Do not expose your reasoning chain."""
-    return prompt
+        _fast_model = init_chat_model(
+            model=os.getenv("LLM_FAST_MODEL") or os.getenv("LLM_MODEL"),
+            model_provider="openai",
+            api_key=os.getenv("LLM_API_KEY"),
+            base_url=os.getenv("LLM_BASE_URL"),
+            temperature=0.0,
+        )
+    return _fast_model
+
+
+def _get_context_model():
+    """_manage_context_window 摘要用的模型。"""
+    return _get_fast_model()
 
 
 # Tokenizer setup
@@ -365,26 +364,6 @@ class ConversationStorage:
             db.close()
 
 
-def create_agent_instance():
-    model = init_chat_model(
-        model=MODEL,
-        model_provider="openai",
-        api_key=API_KEY,
-        base_url=BASE_URL,
-        temperature=0.3,
-        stream_usage=True,
-    )
-
-    agent = create_agent(
-        model=model,
-        tools=[get_current_weather, search_knowledge_base],
-        system_prompt=get_system_prompt(),
-    )
-    return agent, model
-
-
-agent, model = create_agent_instance()
-
 storage = ConversationStorage()
 
 # 上下文窗口预算
@@ -392,21 +371,11 @@ CONTEXT_WINDOW_TOKENS = int(os.getenv("CONTEXT_WINDOW_TOKENS", "128000"))
 CONTEXT_BUDGET_RATIO = 0.8
 RECENT_TURNS_KEEP = 5  # 始终保留最近 N 轮
 
-# 系统提示词 token 数（启动时结算一次）
-_system_prompt_tokens = 0
-
-
-def _get_system_prompt_tokens() -> int:
-    global _system_prompt_tokens
-    if _system_prompt_tokens == 0:
-        _system_prompt_tokens = count_tokens(get_system_prompt())
-    return _system_prompt_tokens
-
 
 def _available_budget() -> int:
     """可用于历史消息的总 token 预算。"""
     total = int(CONTEXT_WINDOW_TOKENS * CONTEXT_BUDGET_RATIO)
-    return max(total - _get_system_prompt_tokens(), 4000)
+    return max(total, 4000)
 
 
 def summarize_old_messages(model, messages: list) -> str:
@@ -468,155 +437,274 @@ def _manage_context_window(messages: list, model) -> list:
     return [summary_msg] + messages[split_idx:]
 
 
-def chat_with_agent(user_text: str, user_id: str = "default_user", session_id: str = "default_session"):
-    """使用 Agent 处理用户消息并返回响应。"""
-    messages = storage.load(user_id, session_id)
+# ---------- 持久化笔记 / 会话标题辅助 ----------
+CONTEXT_WINDOW_MESSAGES = 6  # 笔记维护触发阈值（消息条数）
 
-    # 清理可能残留的 RAG 上下文，避免跨请求污染
-    get_last_rag_context(clear=True)
-    reset_tool_call_guards()
 
-    user_msg = HumanMessage(content=user_text)
-    user_msg.additional_kwargs["_token_count"] = count_tokens(user_text)
-    messages.append(user_msg)
+def _should_update_persistent_note(messages: list, current_note: str) -> bool:
+    """只在短期上下文真正开始裁剪时才花钱维护笔记。"""
+    return bool(current_note) or len(messages) > CONTEXT_WINDOW_MESSAGES
 
-    messages = _manage_context_window(messages, model)
 
-    result = agent.invoke(
-        {"messages": messages},
-        config={"recursion_limit": 8},
+def generate_session_title(user_text: str) -> str:
+    compact_title = " ".join(user_text.split()).strip(" \t\r\n。！？!?，,；;：:")
+    return compact_title[:16] or "新会话"
+
+
+def _title_for(metadata: dict, is_first_message: bool, user_text: str) -> str:
+    """HITL 分支保存会话元数据时用的标题：首轮生成新标题，否则沿用已有标题。"""
+    if is_first_message:
+        return generate_session_title(user_text)
+    return metadata.get("title") or ""
+
+
+async def update_persistent_note(current_note, user_text, ai_response, history_messages=None):
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(
+        None,
+        lambda: _update_persistent_note_sync(
+            current_note, user_text, ai_response, history_messages=history_messages
+        ),
     )
 
-    response_content = ""
-    if isinstance(result, dict):
-        if "output" in result:
-            response_content = result["output"]
-        elif "messages" in result and result["messages"]:
-            msg = result["messages"][-1]
-            response_content = getattr(msg, "content", str(msg))
-        else:
-            response_content = str(result)
-    elif hasattr(result, "content"):
-        response_content = result.content
-    else:
-        response_content = str(result)
 
-    ai_msg = AIMessage(content=response_content)
-    ai_msg.additional_kwargs["_token_count"] = count_tokens(response_content)
-    messages.append(ai_msg)
+def _update_persistent_note_sync(current_note, user_text, ai_response, *, history_messages=None):
+    try:
+        history_text = ""
+        if history_messages:
+            lines = [
+                f"{'用户' if isinstance(m, HumanMessage) else 'AI'}：{str(m.content)}"
+                for m in history_messages
+            ]
+            history_text = (
+                "\n\n▼ 首次建立笔记时需要一并概括的此前对话：\n" + "\n".join(lines) + "\n\n"
+            )
+        prompt = (
+            "你是一个【Context Manager Agent】，负责维护多轮对话中的「持久化笔记」。\n"
+            "笔记是模型在有限上下文窗口下的长效工作记忆，记录已解决的问题与关键事实。\n\n"
+            "更新规则：\n"
+            "1. 将新信息与现有笔记智能合并，不要简单拼接。\n"
+            "2. 过滤噪音，控制在 500 字以内，用简明条目输出。\n"
+            "3. 若信息冲突，保留最可靠或最新版本。\n\n"
+            f"▼ 现有笔记：\n{current_note if current_note else '无'}\n\n"
+            f"{history_text}"
+            f"▼ 最新一轮对话：\n用户：{user_text}\nAI：{ai_response}\n\n"
+            "请直接输出更新后的笔记（纯文本，不要解释或 Markdown 代码块）："
+        )
+        res = _get_fast_model().invoke([HumanMessage(content=prompt)])
+        return (res.content or "").strip()
+    except Exception as e:
+        print(f"Context Manager Error: {e}")
+        return current_note
 
-    rag_context = get_last_rag_context(clear=True)
-    rag_trace = rag_context.get("rag_trace") if rag_context else None
 
-    extra_message_data = [None] * (len(messages) - 1) + [{"rag_trace": rag_trace}]
-    storage.save(user_id, session_id, messages, extra_message_data=extra_message_data)
-
-    return {
-        "response": response_content,
-        "rag_trace": rag_trace,
-    }
+# ---------- 图编排 ----------
+def _session_thread_config(user_id: str, session_id: str) -> dict:
+    return {"configurable": {"thread_id": f"{user_id}:{session_id}"}}
 
 
-async def chat_with_agent_stream(user_text: str, user_id: str = "default_user", session_id: str = "default_session"):
-    """使用 Agent 处理用户消息并流式返回响应。
+def _history_dicts(messages: list) -> list[dict]:
+    out = []
+    for m in messages:
+        role = "system" if m.type in ("system", "summary") else ("user" if m.type == "human" else "assistant")
+        out.append({"role": role, "content": str(m.content)})
+    return out
 
-    架构：使用统一输出队列 + 后台任务，确保 RAG 检索步骤在工具执行期间实时推送。
+
+def _run_graph_turn(input_data: dict, cfg: dict) -> tuple[list[dict], dict, dict]:
+    """跑一轮图，返回 (custom_events, final_state, pending_hitl_value)。
+
+    final_state 为 graph.get_state(cfg) 快照；pending_hitl_value 为中断值或 None。
     """
-    messages = storage.load(user_id, session_id)
+    from backend.infra.checkpointer import get_checkpointer
+    from backend.rag.chat_graph import build_chat_graph
 
-    # 清理可能残留的 RAG 上下文
-    get_last_rag_context(clear=True)
-    reset_tool_call_guards()
+    graph = build_chat_graph(checkpointer=get_checkpointer())
+    events = list(graph.stream(input_data, config=cfg, stream_mode=["custom"]))
+    snap = graph.get_state(cfg)
+    pending = None
+    if snap.tasks and getattr(snap.tasks[0], "interrupts", None):
+        pending = snap.tasks[0].interrupts[0].value
+    return [d for _kind, d in events], snap, pending
 
-    # 统一输出队列：所有事件（content / rag_step）都汇入这里
-    output_queue = asyncio.Queue()
 
-    class _RagStepProxy:
-        """代理对象：将 emit_rag_step 的原始 step dict 包装后放入统一输出队列。"""
-
-        def put_nowait(self, step):
-            output_queue.put_nowait({"type": "rag_step", "step": step})
-
-    set_rag_step_queue(_RagStepProxy())
+def chat_with_agent(user_text: str, user_id: str = "default_user", session_id: str = "default_session"):
+    messages, metadata = storage.load_with_meta(user_id, session_id)
+    persistent_note = metadata.get("persistent_note", "")
+    is_first_message = len(messages) == 0
 
     user_msg = HumanMessage(content=user_text)
     user_msg.additional_kwargs["_token_count"] = count_tokens(user_text)
     messages.append(user_msg)
+    messages = _manage_context_window(messages, _get_context_model())
 
-    # Token-aware 上下文窗口管理
-    messages = _manage_context_window(messages, model)
+    from backend.infra.checkpointer import get_checkpointer
+    from backend.rag.chat_graph import build_chat_graph
+
+    cfg = _session_thread_config(user_id, session_id)
+    graph = build_chat_graph(checkpointer=get_checkpointer())
+    snap = graph.get_state(cfg)
+    pending = bool(snap.tasks and getattr(snap.tasks[0], "interrupts", None))
+
+    if pending:
+        input_data = Command(resume=user_text)
+    else:
+        input_data = {
+            "user_text": user_text,
+            "persistent_note": persistent_note,
+            "history": _history_dicts(messages[:-1]),
+        }
+
+    events, final_snap, hitl_value = _run_graph_turn(input_data, cfg)
+    full_response = ""
+    for ev in events:
+        if ev.get("type") == "content":
+            full_response += ev.get("content", "")
+
+    if hitl_value is not None:
+        prompt = hitl_value.get("prompt", "")
+        options = hitl_value.get("options") or []
+        hitl_text = format_hitl_message(prompt, options)
+        rag_trace = normalize_rag_trace(final_snap.values.get("rag_trace") if hasattr(final_snap, "values") else None)
+        messages.append(AIMessage(content=hitl_text))
+        extra = [None] * (len(messages) - 1) + [{"rag_trace": rag_trace}]
+        hitl_save_meta = {"title": _title_for(metadata, is_first_message, user_text)}
+        storage.save(user_id, session_id, messages, metadata=hitl_save_meta, extra_message_data=extra)
+        return {"response": hitl_text, "rag_trace": rag_trace, "hitl": hitl_value}
+
+    rag_trace = normalize_rag_trace(final_snap.values.get("rag_trace") if hasattr(final_snap, "values") else None)
+    full_response = full_response or (final_snap.values.get("response") if hasattr(final_snap, "values") else "")
+    save_meta = dict(metadata)
+    if is_first_message:
+        save_meta["title"] = generate_session_title(user_text)
+    if _should_update_persistent_note(messages, persistent_note):
+        save_meta["persistent_note"] = _update_persistent_note_sync(
+            persistent_note,
+            user_text,
+            full_response,
+            history_messages=messages[:-1] if not persistent_note else None,
+        )
+    messages.append(AIMessage(content=full_response))
+    extra = [None] * (len(messages) - 1) + [{"rag_trace": rag_trace}]
+    storage.save(user_id, session_id, messages, metadata=save_meta, extra_message_data=extra)
+    return {"response": full_response, "rag_trace": rag_trace}
+
+
+async def chat_with_agent_stream(
+    user_text: str, user_id: str = "default_user", session_id: str = "default_session"
+):
+    """流式驱动图：把整轮跑进线程，将 custom 事件经 asyncio.Queue 转发为 SSE。"""
+    yield f"data: {json.dumps({'type': 'rag_step', 'step': {'icon': '📨', 'label': '请求已接收，正在准备回答'}})}\n\n"
+
+    messages, metadata = storage.load_with_meta(user_id, session_id)
+    persistent_note = metadata.get("persistent_note", "")
+    is_first_message = len(messages) == 0
+
+    user_msg = HumanMessage(content=user_text)
+    user_msg.additional_kwargs["_token_count"] = count_tokens(user_text)
+    messages.append(user_msg)
+    messages = _manage_context_window(messages, _get_context_model())
+
+    from backend.infra.checkpointer import get_checkpointer
+    from backend.rag.chat_graph import build_chat_graph
+
+    cfg = _session_thread_config(user_id, session_id)
+    graph = build_chat_graph(checkpointer=get_checkpointer())
+    snap = await graph.aget_state(cfg)
+    pending = bool(snap.tasks and getattr(snap.tasks[0], "interrupts", None))
+
+    input_data = (
+        Command(resume=user_text)
+        if pending
+        else {
+            "user_text": user_text,
+            "persistent_note": persistent_note,
+            "history": _history_dicts(messages[:-1]),
+        }
+    )
+
+    output_queue: asyncio.Queue = asyncio.Queue()
+
+    def _worker():
+        try:
+            for kind, data in graph.stream(input_data, config=cfg, stream_mode=["custom"]):
+                if kind != "custom":
+                    continue
+                output_queue.put_nowait(data)
+            output_queue.put_nowait(None)
+        except Exception as e:
+            output_queue.put_nowait({"type": "error", "content": str(e)})
+            output_queue.put_nowait(None)
+
+    task = asyncio.create_task(asyncio.to_thread(_worker))
 
     full_response = ""
-
-    async def _agent_worker():
-        """后台任务：运行 agent 并将内容 chunk 推入输出队列。"""
-        nonlocal full_response
-        try:
-            async for msg, metadata in agent.astream(
-                {"messages": messages},
-                stream_mode="messages",
-                config={"recursion_limit": 8},
-            ):
-                if not isinstance(msg, AIMessageChunk):
-                    continue
-                if getattr(msg, "tool_call_chunks", None):
-                    continue
-
-                content = ""
-                if isinstance(msg.content, str):
-                    content = msg.content
-                elif isinstance(msg.content, list):
-                    for block in msg.content:
-                        if isinstance(block, str):
-                            content += block
-                        elif isinstance(block, dict) and block.get("type") == "text":
-                            content += block.get("text", "")
-
-                if content:
-                    full_response += content
-                    await output_queue.put({"type": "content", "content": content})
-        except Exception as e:
-            await output_queue.put({"type": "error", "content": str(e)})
-        finally:
-            # 哨兵：通知主循环 agent 已完成
-            await output_queue.put(None)
-
-    # 启动后台任务
-    agent_task = asyncio.create_task(_agent_worker())
+    session_title = None
+    if is_first_message:
+        session_title = generate_session_title(user_text)
+        yield f"data: {json.dumps({'type': 'session_title', 'title': session_title, 'session_id': session_id})}\n\n"
 
     try:
-        # 主循环：持续从统一队列取事件并 yield SSE
         while True:
-            event = await output_queue.get()
-            if event is None:
+            ev = await output_queue.get()
+            if ev is None:
                 break
-            yield f"data: {json.dumps(event)}\n\n"
+            if ev.get("type") == "content":
+                full_response += ev.get("content", "")
+                yield f"data: {json.dumps(ev)}\n\n"
+            elif ev.get("type") == "rag_step":
+                yield f"data: {json.dumps(ev)}\n\n"
+            elif ev.get("type") == "error":
+                yield f"data: {json.dumps(ev)}\n\n"
     except GeneratorExit:
-        agent_task.cancel()
-        try:
-            await agent_task
-        except asyncio.CancelledError:
-            pass
+        task.cancel()
         raise
     finally:
-        set_rag_step_queue(None)
-        if not agent_task.done():
-            agent_task.cancel()
+        if not task.done():
+            task.cancel()
 
-    # 获取 RAG trace
-    rag_context = get_last_rag_context(clear=True)
-    rag_trace = rag_context.get("rag_trace") if rag_context else None
+    snap = await graph.aget_state(cfg)
+    hitl_value = None
+    if snap.tasks and getattr(snap.tasks[0], "interrupts", None):
+        hitl_value = snap.tasks[0].interrupts[0].value
 
-    # 发送 trace 信息
+    rag_trace = normalize_rag_trace(snap.values.get("rag_trace") if hasattr(snap, "values") else None)
     if rag_trace:
         yield f"data: {json.dumps({'type': 'trace', 'rag_trace': rag_trace})}\n\n"
 
-    # 发送结束信号
+    if hitl_value is not None:
+        hitl_event = {
+            "route": hitl_value.get("route"),
+            "prompt": hitl_value.get("prompt"),
+            "options": hitl_value.get("options") or [],
+        }
+        yield f"data: {json.dumps({'type': 'hitl_request', 'hitl': hitl_event})}\n\n"
+        yield "data: [DONE]\n\n"
+        hitl_text = format_hitl_message(hitl_event["prompt"], hitl_event["options"])
+        messages.append(AIMessage(content=hitl_text))
+        extra = [None] * (len(messages) - 1) + [{"rag_trace": rag_trace}]
+        save_meta = dict(metadata)
+        if session_title:
+            save_meta["title"] = session_title
+        storage.save(user_id, session_id, messages, metadata=save_meta, extra_message_data=extra)
+        return
+
+    full_response = full_response or snap.values.get("response", "")
     yield "data: [DONE]\n\n"
 
-    # 保存对话
-    ai_msg = AIMessage(content=full_response)
-    ai_msg.additional_kwargs["_token_count"] = count_tokens(full_response)
-    messages.append(ai_msg)
-    extra_message_data = [None] * (len(messages) - 1) + [{"rag_trace": rag_trace}]
-    storage.save(user_id, session_id, messages, extra_message_data=extra_message_data)
+    save_meta = dict(metadata)
+    if session_title:
+        save_meta["title"] = session_title
+    if _should_update_persistent_note(messages, persistent_note):
+        try:
+            save_meta["persistent_note"] = update_persistent_note(
+                persistent_note,
+                user_text,
+                full_response,
+                history_messages=messages[:-1] if not persistent_note else None,
+            )
+        except Exception as e:
+            print(f"Update persistent note error: {e}")
+    messages.append(AIMessage(content=full_response))
+    extra = [None] * (len(messages) - 1) + [{"rag_trace": rag_trace}]
+    storage.save(user_id, session_id, messages, metadata=save_meta, extra_message_data=extra)
