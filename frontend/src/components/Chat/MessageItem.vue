@@ -19,6 +19,8 @@
       <template v-else>
         <ThinkingTrace v-if="msg.isThinking && !msg.text" :msg="msg" :msg-index="msgIndex" />
 
+        <HitlMessage v-else-if="msg.hitl" :msg="msg" />
+
         <template v-else>
           <MessageContent :text="msg.text" :is-user="false" :msg-index="msgIndex" @cite-click="onCiteClick" />
           <References ref="referencesRef" :msg="msg" :msg-index="msgIndex" @cite-click="onCiteClick" />
@@ -35,6 +37,7 @@ import MessageContent from './MessageContent.vue';
 import ThinkingTrace from './ThinkingTrace.vue';
 import References from './References.vue';
 import RetrievalTraceDetails from './RetrievalTraceDetails.vue';
+import HitlMessage from './HitlMessage.vue';
 import type { Message } from '@/types/chat';
 
 defineProps<{

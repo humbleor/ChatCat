@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { useAuthStore } from './auth';
 import { useSessionStore } from './sessions';
 import api from '@/utils/api';
+import { applySseEvent, appendRagStepToGroups as groupSteps } from '@/utils/sse';
 import type { Message, RagStep, GroupedRagStep } from '@/types/chat';
 
 export const useChatStore = defineStore('chat', {
@@ -108,33 +109,7 @@ export const useChatStore = defineStore('chat', {
     },
 
     appendRagStepToGroups(prev: GroupedRagStep[], step: RagStep): GroupedRagStep[] {
-      const groups = prev ? [...prev] : [];
-      const g = step.group || null;
-      const groupLabel = step.group_label || g;
-
-      if (g) {
-        const idx = groups.findIndex((grp) => grp.group === g);
-        if (idx >= 0) {
-          const existing = groups[idx];
-          const updated: GroupedRagStep = {
-            group: existing.group,
-            label: existing.label || groupLabel,
-            steps: [...existing.steps, step],
-            collapsed: existing.collapsed,
-          };
-          groups[idx] = updated;
-          return groups;
-        }
-        return [...groups, { group: g, label: groupLabel, steps: [step], collapsed: true }];
-      }
-
-      const last = groups.length > 0 ? groups[groups.length - 1] : null;
-      if (last && last.group === null) {
-        const updated = { ...last, steps: [...last.steps, step] };
-        groups[groups.length - 1] = updated;
-        return groups;
-      }
-      return [...groups, { group: null, label: null, steps: [step], collapsed: false }];
+      return groupSteps(prev, step);
     },
 
     groupRagSteps(steps: RagStep[]): GroupedRagStep[] {
@@ -190,6 +165,13 @@ export const useChatStore = defineStore('chat', {
       if (this.abortController) {
         this.abortController.abort();
       }
+    },
+
+    async handleHitlReply(replyText: string) {
+      const text = (replyText || '').trim();
+      if (!text || this.isLoading) return;
+      this.userInput = text;
+      await this.handleSend();
     },
 
     async handleSend() {
@@ -301,31 +283,19 @@ export const useChatStore = defineStore('chat', {
               if (dataStr === '[DONE]') continue;
               try {
                 const data = JSON.parse(dataStr);
-                if (data.type === 'content') {
-                  const botMsg = requestMessages[botMsgIdx];
-                  if (!botMsg) continue;
-                  if (botMsg.isThinking) {
-                    botMsg.isThinking = false;
-                  }
-                  botMsg.text += data.content;
-                } else if (data.type === 'trace') {
-                  const botMsg = requestMessages[botMsgIdx];
-                  if (botMsg) {
-                    botMsg.ragTrace = data.rag_trace;
-                  }
-                } else if (data.type === 'rag_step') {
-                  const msg = requestMessages[botMsgIdx];
-                  if (!msg) continue;
-                  if (!msg.ragSteps) msg.ragSteps = [];
-                  msg.ragSteps.push(data.step);
-                  msg._groupedSteps = this.appendRagStepToGroups(msg._groupedSteps || [], data.step);
-                } else if (data.type === 'error') {
-                  streamHadError = true;
-                  const botMsg = requestMessages[botMsgIdx];
-                  if (!botMsg) continue;
-                  botMsg.isThinking = false;
-                  botMsg.text += `\n[Error: ${data.content}]`;
+                if (data.type === 'session_title') {
+                  const target = sessionStore.sessions.find(
+                    (s) => s.session_id === (data.session_id || requestSessionId)
+                  );
+                  if (target) target.title = data.title;
+                  continue;
                 }
+                if (data.type === 'error') {
+                  streamHadError = true;
+                }
+                const botMsg = requestMessages[botMsgIdx];
+                if (!botMsg) continue;
+                requestMessages[botMsgIdx] = applySseEvent(botMsg, data);
               } catch (e) {
                 console.warn('SSE parse error:', e);
               }

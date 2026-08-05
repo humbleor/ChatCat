@@ -83,6 +83,12 @@ export interface GroupedRagStep {
   collapsed: boolean;
 }
 
+export interface HitlRequest {
+  route?: 'clarify' | 'scope_select';
+  prompt: string;
+  options?: string[];
+}
+
 export interface Message {
   text: string;
   isUser: boolean;
@@ -91,6 +97,7 @@ export interface Message {
   ragTrace?: RagTrace | null;
   ragSteps?: RagStep[];
   _groupedSteps?: GroupedRagStep[];
+  hitl?: HitlRequest | null;
 }
 
 export interface ChatSession {
