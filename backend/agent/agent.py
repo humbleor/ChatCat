@@ -681,8 +681,6 @@ async def chat_with_agent_stream(
             "prompt": hitl_value.get("prompt"),
             "options": hitl_value.get("options") or [],
         }
-        yield f"data: {json.dumps({'type': 'hitl_request', 'hitl': hitl_event})}\n\n"
-        yield "data: [DONE]\n\n"
         hitl_text = format_hitl_message(hitl_event["prompt"], hitl_event["options"])
         messages.append(AIMessage(content=hitl_text))
         extra = [None] * (len(messages) - 1) + [{"rag_trace": rag_trace}]
@@ -690,10 +688,11 @@ async def chat_with_agent_stream(
         if session_title:
             save_meta["title"] = session_title
         storage.save(user_id, session_id, messages, metadata=save_meta, extra_message_data=extra)
+        yield f"data: {json.dumps({'type': 'hitl_request', 'hitl': hitl_event})}\n\n"
+        yield "data: [DONE]\n\n"
         return
 
     full_response = full_response or snap.values.get("response", "")
-    yield "data: [DONE]\n\n"
 
     save_meta = dict(metadata)
     if session_title:
@@ -711,3 +710,5 @@ async def chat_with_agent_stream(
     messages.append(AIMessage(content=full_response))
     extra = [None] * (len(messages) - 1) + [{"rag_trace": rag_trace}]
     storage.save(user_id, session_id, messages, metadata=save_meta, extra_message_data=extra)
+
+    yield "data: [DONE]\n\n"
