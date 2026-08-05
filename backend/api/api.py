@@ -183,6 +183,21 @@ async def chat_stream_endpoint(request: ChatRequest, current_user: User = Depend
     )
 
 
+@router.post("/chat/hitl/cancel")
+async def cancel_hitl(request: ChatRequest, current_user: User = Depends(get_current_user)):
+    """放弃当前 HITL 追问：删除该会话的 checkpoint 线程，下一条消息走新问题。"""
+    from backend.infra.checkpointer import get_checkpointer
+    from backend.agent.agent import _session_thread_config
+    try:
+        cfg = _session_thread_config(current_user.username, request.session_id or "default_session")
+        # langgraph-checkpoint-postgres 的 delete_thread 签名是 (thread_id: str)；
+        # 若传入 config dict，str(cfg) 不会匹配任何 thread_id，DELETE 命中 0 行而静默失效。
+        get_checkpointer().delete_thread(cfg["configurable"]["thread_id"])
+        return {"ok": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 async def _save_upload_file(file: UploadFile, file_path: Path) -> None:
     """按块写入上传文件，避免大文件一次性读入内存。"""
     with open(file_path, "wb") as f:
