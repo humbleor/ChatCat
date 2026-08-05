@@ -189,11 +189,17 @@ def _make_check_hitl(detect_fn: Callable):
 
 
 # ---------- 天气城市名提取 ----------
+# 保守快速路径：只接受「干净城市名 + 天气/时间词」句式；含动词/副词/时间词的匹配一律拒绝，
+# 交给 LLM 兜底，避免把「知道武汉」「武汉下周三」这类脏片段直接传给天气工具。
 _LEADING_NOISE_RE = re.compile(
-    r"^(?:请问|麻烦|帮我|帮我查|查一?下|看看|看下|一下|今天|明天|后天|昨天|现在|想知道|我想)+"
+    r"^(?:请问|麻烦|帮忙|帮我|帮我查|查一?下|看看|看下|一下|今天|明天|后天|昨天|现在|想知道|我想)+"
 )
 _FAST_LOC_RE = re.compile(
     r"^([一-鿿]{2,6}?)(?:的)?(?:今天|明天|后天|昨天|现在|天气|气温|温度|下雨|下雪|风力|风向|湿度|预报)"
+)
+_DIRTY_LOC_RE = re.compile(
+    r"查|知|看|会|下|周|请|想|帮|问|麻烦|帮忙|预报|今|明|后"
+    r"|天气|气温|温度|下雨|下雪|风力|风向|湿度|怎么样|多少|什么"
 )
 
 
@@ -204,15 +210,20 @@ def _extract_location_fast(question: str) -> Optional[str]:
     if not m:
         return None
     loc = m.group(1)
-    # 只接受典型城市/省份名长度（含 市/省/区/县 后缀最多 5 字），拒绝多地名并列等复杂情形
-    if 2 <= len(loc) <= 5 and not any(c in loc for c in "和与及、，,"):
+    # 拒绝包含动词/副词/时间词/天气词或并列地名的「脏」城市名
+    if 2 <= len(loc) <= 5 and not _DIRTY_LOC_RE.search(loc) and not any(c in loc for c in "和与及、，,"):
         return loc
     return None
 
 
-def _extract_location_llm(question: str, router_model) -> Optional[str]:
-    """LLM 兜底：用已加载的 router 模型一次性抽取城市名（只回城市名或 NONE）。"""
+def _extract_location_llm(question: str) -> Optional[str]:
+    """LLM 兜底：懒加载 router 模型，一次性抽取城市名（只回城市名或 NONE）。"""
     try:
+        from backend.rag.rag_pipeline import _get_router_model
+
+        router_model = _get_router_model()
+        if router_model is None:
+            return None
         prompt = (
             "从以下天气查询中提取城市名。只输出城市名本身（例如：武汉），不要任何解释。"
             "如果查询中没有明确的城市名，只输出 NONE。\n"
@@ -225,29 +236,31 @@ def _extract_location_llm(question: str, router_model) -> Optional[str]:
         first_line = text.splitlines()[0].strip()
         if first_line.upper() == "NONE":
             return None
-        first_line = first_line.strip("。.,，:： \t")
-        return first_line if 1 <= len(first_line) <= 8 else None
+        # 剥离可能带出的天气/时间尾巴，只留城市名
+        cleaned = re.sub(
+            r"(?:的)?(?:今天|明天|后天|昨天|现在|天气|气温|温度|下雨|下雪|风力|风向|湿度|预报|怎么样|多少)+$",
+            "",
+            first_line,
+        )
+        cleaned = cleaned.strip("。.,，:： \t")
+        return cleaned if 1 <= len(cleaned) <= 8 else None
     except Exception:
         return None
 
 
-def _extract_location(question: str, router_model) -> str:
+def _extract_location(question: str) -> str:
     """从问句中提取城市名。返回城市名；无法识别返回空字符串。"""
     loc = _extract_location_fast(question)
     if loc:
         return loc
-    if router_model is not None:
-        loc = _extract_location_llm(question, router_model)
-        if loc:
-            return loc
-    return ""
+    loc = _extract_location_llm(question)
+    return loc or ""
 
 
 def weather_node(state: ChatState) -> dict:
     from backend.agent.tools import get_current_weather
-    from backend.rag.rag_pipeline import _get_router_model
 
-    location = _extract_location(state["question"], _get_router_model())
+    location = _extract_location(state["question"])
     if not location:
         return {"weather_result": "无法识别查询中的城市", "phase": "generate"}
     result = get_current_weather.func(location, extensions="base")
