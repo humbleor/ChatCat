@@ -72,3 +72,35 @@ def test_detect_no_hitl_single_cluster():
     ]
     d = detect_hitl("销售提成", docs, router_model=None)
     assert not d.needs_hitl
+
+
+class _StubRouter:
+    def __init__(self, reply):
+        self.reply = reply
+        self.calls = 0
+
+    def invoke(self, messages):
+        self.calls += 1
+        return type("R", (), {"content": self.reply})()
+
+
+def test_detect_clarify_with_router():
+    docs = [{"filename": "销售.md", "text": "t", "page_number": 1}]
+    router = _StubRouter("请问指的是哪个部门的报销标准？")
+    d = detect_hitl("报销标准", docs, router_model=router)
+    assert d.needs_hitl and d.route == "clarify"
+    assert d.retrieval_status == "needs_clarification"
+    assert d.prompt
+
+
+def test_detect_no_clarify_when_router_says_no():
+    docs = [{"filename": "销售.md", "text": "t", "page_number": 1}]
+    router = _StubRouter("NO")
+    d = detect_hitl("销售提成是多少", docs, router_model=router)
+    assert not d.needs_hitl
+
+
+def test_detect_no_knowledge_when_empty_docs():
+    d = detect_hitl("任意问题", [], router_model=None)
+    assert d.retrieval_status == "no_knowledge"
+    assert not d.needs_hitl
