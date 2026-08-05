@@ -19,6 +19,7 @@ from backend.agent.tools import (
 from backend.infra.cache import cache
 from backend.infra.database import SessionLocal
 from backend.models.models import ChatMessage, ChatSession, User
+from backend.rag.hitl_detect import normalize_rag_trace
 
 load_dotenv()
 
@@ -158,16 +159,16 @@ class ConversationStorage:
                             "id": db_id,
                             "timestamp": msg.additional_kwargs.get("_timestamp", now.isoformat()),
                             "token_count": msg.additional_kwargs.get("_token_count", 0),
-                            "rag_trace": msg.additional_kwargs.get("_rag_trace"),
+                            "rag_trace": normalize_rag_trace(msg.additional_kwargs.get("_rag_trace")),
                         }
                     )
                     continue
 
                 # 新消息：INSERT
-                rag_trace = None
+                rag_trace = normalize_rag_trace(None)
                 if extra_message_data and idx < len(extra_message_data):
                     extra = extra_message_data[idx] or {}
-                    rag_trace = extra.get("rag_trace")
+                    rag_trace = normalize_rag_trace(extra.get("rag_trace"))
 
                 tk = count_tokens(str(msg.content))
                 msg_type = msg.additional_kwargs.get("_msg_type", msg.type)
@@ -237,6 +238,25 @@ class ConversationStorage:
         records = self.get_session_messages(user_id, session_id)
         cache.set_json(self._messages_cache_key(user_id, session_id), records)
         return self._to_langchain_messages(records)
+
+    def load_with_meta(self, user_id: str, session_id: str) -> tuple[list, dict]:
+        """加载对话消息及会话元数据（标题、持久化笔记、HITL 状态等）。"""
+        messages = self.load(user_id, session_id)
+        db = SessionLocal()
+        try:
+            user = db.query(User).filter(User.username == user_id).first()
+            if not user:
+                return messages, {}
+            session = (
+                db.query(ChatSession)
+                .filter(ChatSession.user_id == user.id, ChatSession.session_id == session_id)
+                .first()
+            )
+            if not session:
+                return messages, {}
+            return messages, dict(session.metadata_json or {})
+        finally:
+            db.close()
 
     def list_sessions(self, user_id: str) -> list:
         """列出用户的所有会话"""
@@ -311,7 +331,7 @@ class ConversationStorage:
                     "type": row.message_type,
                     "content": row.content,
                     "timestamp": row.timestamp.isoformat(),
-                    "rag_trace": row.rag_trace,
+                    "rag_trace": normalize_rag_trace(row.rag_trace),
                     "token_count": row.token_count,
                 }
                 for row in rows
