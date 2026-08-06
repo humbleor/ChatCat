@@ -25,6 +25,8 @@ frontend/dist/
 # test
 tests/
 
+docs/
+
 # else
 study/
 DEVLOG.md

@@ -169,12 +169,12 @@ def retrieve(state: ChatState) -> dict:
     return {"docs": docs, "context": _format_docs(docs), "rag_trace": trace}
 
 
-def _default_detect(question: str, docs: list[dict], router_model=None) -> HitlDecision:
+def _default_detect(question: str, docs: list[dict], router_model=None, history=None) -> HitlDecision:
     """真实检测：澄清用 router LLM（懒加载），范围选择用聚类启发式。"""
     from backend.rag.hitl_detect import detect_hitl
     from backend.rag.rag_pipeline import _get_router_model
 
-    return detect_hitl(question, docs, router_model=_get_router_model())
+    return detect_hitl(question, docs, router_model=_get_router_model(), history=history)
 
 
 def _make_check_hitl(detect_fn: Callable):
@@ -187,7 +187,7 @@ def _make_check_hitl(detect_fn: Callable):
         if len(state["answers"]) >= MAX_HITL_ROUNDS:
             return {"phase": "generate"}
 
-        decision: HitlDecision = detect_fn(state["question"], state["docs"])
+        decision: HitlDecision = detect_fn(state["question"], state["docs"], history=state.get("history"))
         if not decision.needs_hitl:
             if decision.retrieval_status:
                 # 非 HITL 但带状态（如空文档 → no_knowledge）也要写入 trace，避免丢失
@@ -373,7 +373,8 @@ def build_chat_graph(
 ):
     """retrieve_fn/detect_fn/generate_fn/weather_fn 用于测试注入；默认用真实节点。
 
-    detect_fn 签名：(question, docs, router_model=None) -> HitlDecision。
+    detect_fn 签名：(question, docs, router_model=None, history=None) -> HitlDecision。
+    history 为最近对话（[{role, content}]），用于消解指代词。
     """
     from langgraph.checkpoint.memory import InMemorySaver
 

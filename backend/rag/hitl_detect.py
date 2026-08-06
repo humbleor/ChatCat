@@ -62,6 +62,29 @@ def compose_question(original: str, answers: list[str]) -> str:
     return "\n".join(p for p in parts if p.strip())
 
 
+_HISTORY_MAX_ITEMS = 6
+_HISTORY_MAX_LEN = 200
+
+
+def _format_history_for_detect(history) -> str:
+    """把最近对话压缩成消歧用的一段文本；空历史返回空串。"""
+    if not history:
+        return ""
+    lines = []
+    for item in history[-_HISTORY_MAX_ITEMS:]:
+        role = (item.get("role") or "").lower()
+        speaker = {"user": "用户", "assistant": "助手", "system": "系统"}.get(role, "助手")
+        content = _safe_text(item.get("content"))
+        if not content:
+            continue
+        if len(content) > _HISTORY_MAX_LEN:
+            content = content[:_HISTORY_MAX_LEN] + "…"
+        lines.append(f"{speaker}：{content}")
+    if not lines:
+        return ""
+    return "最近对话（供消歧参考）：\n" + "\n".join(lines) + "\n\n"
+
+
 def format_hitl_message(prompt: str, options: Optional[list[str]] = None) -> str:
     clean_prompt = prompt.strip()
     clean_options = [o.strip() for o in (options or []) if o.strip()]
@@ -104,10 +127,25 @@ def _detect_scope(docs: list[dict]) -> Optional[HitlDecision]:
     )
 
 
-def detect_hitl(question: str, docs: list[dict], router_model=None) -> HitlDecision:
-    """混合判定。router_model 为 None 时仅走启发式（澄清检测跳过）。"""
+def detect_hitl(question: str, docs: list[dict], router_model=None, history=None) -> HitlDecision:
+    """混合判定。router_model 为 None 时仅走启发式（澄清检测跳过）。
+
+    history 为最近对话（[{role, content}]）
+    """
     if not docs:
         return HitlDecision(needs_hitl=False, route="", retrieval_status="no_knowledge")
+
+    if history and router_model is not None:
+        prompt = _judge_clarification(question, router_model, history)
+        if not prompt:
+            return HitlDecision(needs_hitl=False)
+        return HitlDecision(
+            needs_hitl=True,
+            route="clarify",
+            prompt=prompt,
+            options=[],
+            retrieval_status="needs_clarification",
+        )
 
     scope = _detect_scope(docs)
     if scope is not None:
@@ -127,12 +165,16 @@ def detect_hitl(question: str, docs: list[dict], router_model=None) -> HitlDecis
     return HitlDecision(needs_hitl=False)
 
 
-def _judge_clarification(question: str, router_model) -> Optional[str]:
-    """router LLM 判 query 是否歧义/缺槽位；是则返回生成的追问，否则 None。"""
+def _judge_clarification(question: str, router_model, history=None) -> Optional[str]:
+    """router LLM 判 query 是否歧义/缺槽位；是则返回生成的追问，否则 None。
+    """
     prompt = (
         "判断下面这个知识库查询是否缺乏回答所需的关键信息（歧义或缺槽位）。\n"
-        "如果是，请只输出一句对用户的追问；如果信息已足够，只输出 NO。\n"
-        f"查询：{question}"
+        "如果查询使用了「该」「这个」「此」「上述」等指代词，请结合最近对话判断其"
+        "指代对象是否已明确；若已明确，视为信息足够。\n"
+        "如果确实缺乏关键信息，只输出一句对用户的追问；如果信息足够，只输出 NO。\n\n"
+        + _format_history_for_detect(history)
+        + f"查询：{question}"
     )
     try:
         res = router_model.invoke([{"role": "user", "content": prompt}])
