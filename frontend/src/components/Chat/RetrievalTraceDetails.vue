@@ -135,7 +135,7 @@
         >
           <div class="sources-title">初次检索结果</div>
           <ul class="sources-list">
-            <li v-for="(chunk, sIndex) in msg.ragTrace.initial_retrieved_chunks" :key="sIndex" class="source-item">
+            <li v-for="(chunk, sIndex) in msg.ragTrace.initial_retrieved_chunks" :key="sIndex" class="source-item source-item--trace">
               <div class="source-title-line">
                 <span class="source-file">{{ chunk.filename }}</span>
                 <span v-if="chunk.page_number" class="source-page">（第 {{ chunk.page_number }} 页）</span>
@@ -157,7 +157,7 @@
         >
           <div class="sources-title">重写后检索结果</div>
           <ul class="sources-list">
-            <li v-for="(chunk, sIndex) in msg.ragTrace.rewrite_retrieved_chunks" :key="sIndex" class="source-item">
+            <li v-for="(chunk, sIndex) in msg.ragTrace.rewrite_retrieved_chunks" :key="sIndex" class="source-item source-item--trace">
               <div class="source-title-line">
                 <span class="source-file">{{ chunk.filename }}</span>
                 <span v-if="chunk.page_number" class="source-page">（第 {{ chunk.page_number }} 页）</span>

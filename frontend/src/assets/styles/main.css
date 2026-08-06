@@ -2185,6 +2185,11 @@ html[data-theme='light'] .context-source-card:hover {
   animation: highlight-fade 2s ease-out;
 }
 
+/* 检索过程详情里的片段没有 24px 索引徽章列，需覆盖为单列，否则片段文本会被挤进 24px 列导致逐字换行 */
+.source-item--trace {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .ref-index {
   display: grid;
   width: 24px;

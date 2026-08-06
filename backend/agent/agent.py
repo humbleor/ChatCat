@@ -291,6 +291,7 @@ class ConversationStorage:
                         "session_id": s.session_id,
                         "updated_at": s.updated_at.isoformat(),
                         "message_count": count,
+                        "title": (s.metadata_json or {}).get("title"),
                     }
                 )
             cache.set_json(self._sessions_cache_key(user_id), result)

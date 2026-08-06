@@ -99,6 +99,7 @@ class SessionInfo(BaseModel):
     session_id: str
     updated_at: str
     message_count: int
+    title: Optional[str] = None
 
 
 class SessionListResponse(BaseModel):
