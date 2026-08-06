@@ -1,13 +1,13 @@
 # ChatCat 项目说明
 
-ChatCat 是一个基于 LangChain Agent 的 RAG 聊天机器人，后端 FastAPI + 前端 Vite / TypeScript。核心能力：混合检索（Milvus 稠密向量 + BM25 稀疏向量）、Jina 重排序、三级滑动窗口分块 + 自动合并、SSE 流式输出 + 实时 RAG 步骤可视化、JWT 鉴权 + RBAC 权限（admin/user）、PostgreSQL 持久化、Redis 缓存。
+ChatCat 是一个基于 LangChain Agent 的 RAG 聊天机器人，后端 FastAPI + 前端 Vue3 / TypeScript / Vite。核心能力：混合检索（Milvus 稠密向量 + BM25 稀疏向量）、Jina 重排序、三级滑动窗口分块 + 自动合并、SSE 流式输出 + 实时 RAG 步骤可视化、JWT 鉴权 + RBAC 权限（admin/user）、PostgreSQL 持久化、Redis 缓存。
 
 ## 本地部署
 
 ### 1) 环境准备
 - Python `3.12+`
 - 包管理建议：`uv`（也支持 `pip`）
-- Docker / Docker Compose（用于启动 Milvus 依赖）
+- Docker / Docker Compose（用于启动业务依赖）
 
 ### 2) 使用 pyproject 安装依赖
 在项目根目录执行：
@@ -38,7 +38,7 @@ cp .env.example .env
 - 向量依赖：`etcd`、`minio`、`standalone`、`attu`
 
 ```bash
-# 启动向量库依赖
+# 启动依赖服务
 docker compose up -d
 
 # 查看服务状态
@@ -47,9 +47,11 @@ docker compose ps
 # 查看日志（可选）
 docker compose logs -f standalone
 
-# 停止并清理
+# 停止依赖服务
 docker compose down
 
+# 停止并清除数据
+docker compose down -v
 ```
 
 端口说明：
