@@ -23,6 +23,9 @@ RERANK_API_KEY = os.getenv("RERANK_API_KEY")
 AUTO_MERGE_ENABLED = os.getenv("AUTO_MERGE_ENABLED", "true").lower() != "false"
 AUTO_MERGE_THRESHOLD = int(os.getenv("AUTO_MERGE_THRESHOLD", "2"))
 LEAF_RETRIEVE_LEVEL = int(os.getenv("LEAF_RETRIEVE_LEVEL", "3"))
+RETRIEVAL_TOP_K = int(os.getenv("RETRIEVAL_TOP_K", "5"))
+# Milvus 叶子层召回候选数；0 表示按 top_k * 3 自动推导
+RETRIEVAL_CANDIDATE_K = int(os.getenv("RETRIEVAL_CANDIDATE_K", "0"))
 
 # 全局初始化检索依赖（与 api 共用 embedding_service）
 _milvus_store = get_milvus_store()
@@ -240,9 +243,10 @@ def step_back_expand(query: str) -> dict:
     }
 
 
-def retrieve_documents(query: str, top_k: int = 5) -> Dict[str, Any]:
+def retrieve_documents(query: str, top_k: int = RETRIEVAL_TOP_K) -> Dict[str, Any]:
     query = sanitize_text(query)
-    candidate_k = max(top_k * 3, top_k)
+    # Milvus 叶子层召回候选数：显式配置优先，未配置则按 top_k * 3 自动推导；始终不小于 top_k
+    candidate_k = max(RETRIEVAL_CANDIDATE_K if RETRIEVAL_CANDIDATE_K > 0 else top_k * 3, top_k)
     filter_expr = f"chunk_level == {LEAF_RETRIEVE_LEVEL}"
     try:
         dense_embeddings = _embedding_service.get_embeddings([query])
