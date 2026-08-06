@@ -33,6 +33,7 @@ class ChatState(TypedDict):
     context: str
     rag_trace: dict
     weather_result: str
+    weather_location: str
     response: str
 
 
@@ -69,17 +70,28 @@ def prepare_context(state: ChatState) -> dict:
         "context": "",
         "rag_trace": {},
         "weather_result": "",
+        "weather_location": "",
         "response": "",
     }
 
 
-_WEATHER_KEYWORDS = ("天气", "气温", "温度", "下雨", "下雪", "weather", "forecast", "climate")
+_WEATHER_KEYWORDS = ("天气", "气温", "下雨", "下雪", "降雨", "气象", "weather", "forecast", "climate")
 
 
 def _judge_route(question: str) -> str:
     q = question.strip().lower()
     if any(k in q for k in _WEATHER_KEYWORDS):
-        return "weather"
+        # 命中天气信号还不够：必须能从问句里提取出干净城市名才走天气，
+        # 否则像「设备温度报警规程」这类含工程词的 KB 查询会被误路由。
+        try:
+            from backend.rag.rag_pipeline import _get_router_model
+
+            router = _get_router_model()
+        except Exception:
+            router = None
+        if _extract_location(question, router):
+            return "weather"
+        return "retrieve"
     try:
         from backend.rag.rag_pipeline import _get_router_model
 
@@ -104,7 +116,18 @@ def _judge_route(question: str) -> str:
 
 def route(state: ChatState) -> dict:
     mode = _judge_route(state["question"])
-    return {"mode": mode, "phase": mode}
+    weather_location = ""
+    if mode == "weather":
+        # _judge_route 已确认城市可提取；这里取一次存入 state，
+        # 供 weather_node 直接复用，避免节点内二次提取。
+        try:
+            from backend.rag.rag_pipeline import _get_router_model
+
+            router = _get_router_model()
+        except Exception:
+            router = None
+        weather_location = _extract_location(state["question"], router)
+    return {"mode": mode, "phase": mode, "weather_location": weather_location}
 
 
 def _history_to_messages(history: list[dict]):
@@ -166,6 +189,11 @@ def _make_check_hitl(detect_fn: Callable):
 
         decision: HitlDecision = detect_fn(state["question"], state["docs"])
         if not decision.needs_hitl:
+            if decision.retrieval_status:
+                # 非 HITL 但带状态（如空文档 → no_knowledge）也要写入 trace，避免丢失
+                trace = dict(state["rag_trace"] or {})
+                trace.update({"retrieval_status": decision.retrieval_status})
+                return {"phase": "generate", "rag_trace": trace}
             return {"phase": "generate"}
 
         hitl_value = {"route": decision.route, "prompt": decision.prompt, "options": list(decision.options)}
@@ -218,12 +246,13 @@ def _extract_location_fast(question: str) -> Optional[str]:
     return None
 
 
-def _extract_location_llm(question: str) -> Optional[str]:
+def _extract_location_llm(question: str, router_model=None) -> Optional[str]:
     """LLM 兜底：懒加载 router 模型，一次性抽取城市名（只回城市名或 NONE）。"""
     try:
-        from backend.rag.rag_pipeline import _get_router_model
+        if router_model is None:
+            from backend.rag.rag_pipeline import _get_router_model
 
-        router_model = _get_router_model()
+            router_model = _get_router_model()
         if router_model is None:
             return None
         prompt = (
@@ -250,19 +279,19 @@ def _extract_location_llm(question: str) -> Optional[str]:
         return None
 
 
-def _extract_location(question: str) -> str:
+def _extract_location(question: str, router=None) -> str:
     """从问句中提取城市名。返回城市名；无法识别返回空字符串。"""
     loc = _extract_location_fast(question)
     if loc:
         return loc
-    loc = _extract_location_llm(question)
+    loc = _extract_location_llm(question, router_model=router)
     return loc or ""
 
 
 def weather_node(state: ChatState) -> dict:
     from backend.agent.tools import get_current_weather
 
-    location = _extract_location(state["question"])
+    location = state.get("weather_location") or _extract_location(state["question"])
     if not location:
         return {"weather_result": "无法识别查询中的城市", "phase": "generate"}
     result = get_current_weather.func(location, extensions="base")

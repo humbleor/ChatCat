@@ -94,9 +94,9 @@ Frontend is now **Vite + TypeScript + Vue 3** (not CDN single-file). Source in `
 10. **HITL 用 LangGraph 原生 `interrupt`/`Command(resume)`**：`check_hitl` 节点 `interrupt(hitl_value)` 挂起，用户补充作为下一轮 `Command(resume=user_text)` 恢复。**import 位置（已实测，勿改动）**：`from langgraph.types import interrupt, Command`（`Command` 不在 `langgraph.graph`）；`get_stream_writer` 从 `langgraph.config` import。
 11. **Checkpoint 持久化到 PostgreSQL**：图用 `build_chat_graph(checkpointer=get_checkpointer())`；`backend/infra/checkpointer.py` 提供 PostgresSaver 进程级单例（`init_checkpointer()` 启动时建表，DSN 需 psycopg v3 格式、去 SQLAlchemy 方言前缀）。**thread_id = `{user_id}:{session_id}`**（`_session_thread_config`），同一个 thread 才能 resume。
 12. **流式路径中断检测用 `graph.get_state(config)`，不是 stream 事件**：`interrupt` 经 `stream`/`astream` 时流会**静默结束**（不产生 `__interrupt__` 事件）；检测 `snap.tasks[0].interrupts[0].value`。resume 时被中断的节点会从头重跑（detect 每轮 HITL 多执行一次重入），检测逻辑须对同输入确定（router temperature=0）。
-13. **`LLM_FAST_MODEL`**：持久化笔记/标题等轻任务用 `_get_fast_model()`（缺省回退 `LLM_MODEL`，temperature=0）。
+13. **`LLM_FAST_MODEL`**：持久化笔记/上下文窗口摘要用 `_get_fast_model()`（缺省回退 `LLM_MODEL`，temperature=0）。
 14. **`POST /chat/hitl/cancel`**：放弃当前挂起的 HITL —— `get_checkpointer().delete_thread(thread_id)` 删除该会话 checkpoint 线程（注意 `delete_thread` 签名是 `(thread_id: str)`，传 config dict 会静默失效），下一条消息按新问题处理。
 
 ## Key env vars
 
-LLM: `LLM_API_KEY`, `LLM_MODEL`, `LLM_BASE_URL`, `LLM_FAST_MODEL`（持久化笔记/标题等轻任务模型，缺省回退 `LLM_MODEL`）. Embedding: `EMBEDDING_MODEL`, `DENSE_EMBEDDING_DIM`. Milvus: `MILVUS_HOST`, `MILVUS_PORT`, `MILVUS_COLLECTION`. DB/Cache: `DATABASE_URL`, `REDIS_URL`. Auth: `JWT_SECRET_KEY`, `ADMIN_INVITE_CODE`.
+LLM: `LLM_API_KEY`, `LLM_MODEL`, `LLM_BASE_URL`, `LLM_FAST_MODEL`（持久化笔记/上下文窗口摘要模型，缺省回退 `LLM_MODEL`）. Embedding: `EMBEDDING_MODEL`, `DENSE_EMBEDDING_DIM`. Milvus: `MILVUS_HOST`, `MILVUS_PORT`, `MILVUS_COLLECTION`. DB/Cache: `DATABASE_URL`, `REDIS_URL`. Auth: `JWT_SECRET_KEY`, `ADMIN_INVITE_CODE`.

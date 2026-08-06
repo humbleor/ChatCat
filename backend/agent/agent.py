@@ -619,17 +619,23 @@ async def chat_with_agent_stream(user_text: str, user_id: str = "default_user", 
     )
 
     output_queue: asyncio.Queue = asyncio.Queue()
+    # asyncio.Queue 非线程安全：_worker 跑在 to_thread 的 executor 线程里，
+    # 必须经由捕获的事件循环用 call_soon_threadsafe 投递，否则并发 put 会撕裂队列。
+    loop = asyncio.get_running_loop()
+
+    def _safe_put(data):
+        loop.call_soon_threadsafe(output_queue.put_nowait, data)
 
     def _worker():
         try:
             for kind, data in graph.stream(input_data, config=cfg, stream_mode=["custom"]):
                 if kind != "custom":
                     continue
-                output_queue.put_nowait(data)
-            output_queue.put_nowait(None)
+                _safe_put(data)
+            _safe_put(None)
         except Exception as e:
-            output_queue.put_nowait({"type": "error", "content": str(e)})
-            output_queue.put_nowait(None)
+            _safe_put({"type": "error", "content": str(e)})
+            _safe_put(None)
 
     task = asyncio.create_task(asyncio.to_thread(_worker))
 

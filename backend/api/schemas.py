@@ -81,6 +81,7 @@ class RagTrace(BaseModel):
 class ChatResponse(BaseModel):
     response: str
     rag_trace: Optional[RagTrace] = None
+    hitl: Optional[dict] = None
 
 
 class MessageInfo(BaseModel):
