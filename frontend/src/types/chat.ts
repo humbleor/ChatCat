@@ -40,10 +40,6 @@ export interface RagTraceFields {
   rerank_applied?: boolean | null;
   rerank_model?: string;
   rerank_error?: string;
-  rerank_timeout_seconds?: number;
-  rerank_min_score?: number;
-  post_rerank_count?: number;
-  post_threshold_count?: number;
   retrieval_empty?: boolean;
   rewrite_method?: 'step_back' | 'hyde';
   step_back_question?: string;

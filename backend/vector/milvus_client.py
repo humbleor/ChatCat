@@ -375,6 +375,60 @@ class MilvusStore:
                 )
         return formatted_results
 
+    def sparse_retrieve(
+        self,
+        query: str,
+        top_k: int = 5,
+        filter_expr: str = "",
+    ) -> list[dict]:
+        """纯 BM25 稀疏检索：raw text 由服务端 BM25 Function 实时生成稀疏向量。
+
+        与 `hybrid_retrieve` 的 sparse 一路一致（metric_type=BM25, drop_ratio_search=0.2），
+        输出字段/格式与 `dense_retrieve` 对齐，便于评估三路信号时横向对比。
+        """
+
+        def _search(client: MilvusClient):
+            return client.search(
+                collection_name=self.collection_name,
+                data=[query],
+                anns_field="sparse_embedding",
+                search_params={"metric_type": "BM25", "params": {"drop_ratio_search": 0.2}},
+                limit=top_k,
+                output_fields=[
+                    "text",
+                    "filename",
+                    "file_type",
+                    "page_number",
+                    "chunk_id",
+                    "parent_chunk_id",
+                    "root_chunk_id",
+                    "chunk_level",
+                    "chunk_idx",
+                ],
+                filter=filter_expr,
+            )
+
+        results = self._run(_search)
+        formatted_results = []
+        for hits in results:
+            for hit in hits:
+                formatted_results.append(
+                    {
+                        "id": hit.get("id"),
+                        "text": hit.get("entity", {}).get("text", ""),
+                        "filename": hit.get("entity", {}).get("filename", ""),
+                        "file_type": hit.get("entity", {}).get("file_type", ""),
+                        "page_number": hit.get("entity", {}).get("page_number", 0),
+                        "chunk_id": hit.get("entity", {}).get("chunk_id", ""),
+                        "parent_chunk_id": hit.get("entity", {}).get("parent_chunk_id", ""),
+                        "root_chunk_id": hit.get("entity", {}).get("root_chunk_id", ""),
+                        "chunk_level": hit.get("entity", {}).get("chunk_level", 0),
+                        "chunk_idx": hit.get("entity", {}).get("chunk_idx", 0),
+                        "score": hit.get("distance", 0.0),
+                    }
+                )
+        return formatted_results
+
     def delete(self, filter_expr: str):
         return self._run(lambda client: client.delete(collection_name=self.collection_name, filter=filter_expr))
 
