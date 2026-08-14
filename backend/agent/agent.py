@@ -157,7 +157,7 @@ class ConversationStorage:
                             "type": msg.type,
                             "content": str(msg.content),
                             "id": db_id,
-                            "timestamp": msg.additional_kwargs.get("_timestamp", now.isoformat()),
+                            "timestamp": msg.additional_kwargs.get("_timestamp", now.isoformat() + "Z"),
                             "token_count": msg.additional_kwargs.get("_token_count", 0),
                             "rag_trace": normalize_rag_trace(msg.additional_kwargs.get("_rag_trace")),
                         }
@@ -200,7 +200,7 @@ class ConversationStorage:
                         "content": str(msg.content),
                         "id": db_id,
                         "token_count": tk,
-                        "timestamp": now.isoformat(),
+                        "timestamp": now.isoformat() + "Z",
                         "rag_trace": rag_trace,
                     }
                 )
@@ -289,7 +289,7 @@ class ConversationStorage:
                 result.append(
                     {
                         "session_id": s.session_id,
-                        "updated_at": s.updated_at.isoformat(),
+                        "updated_at": s.updated_at.isoformat() + "Z",
                         "message_count": count,
                         "title": (s.metadata_json or {}).get("title"),
                     }
@@ -331,7 +331,7 @@ class ConversationStorage:
                     "id": row.id,
                     "type": row.message_type,
                     "content": row.content,
-                    "timestamp": row.timestamp.isoformat(),
+                    "timestamp": row.timestamp.isoformat() + "Z",
                     "rag_trace": normalize_rag_trace(row.rag_trace),
                     "token_count": row.token_count,
                 }
@@ -698,7 +698,7 @@ async def chat_with_agent_stream(user_text: str, user_id: str = "default_user", 
         save_meta["title"] = session_title
     if _should_update_persistent_note(messages, persistent_note):
         try:
-            save_meta["persistent_note"] = update_persistent_note(
+            save_meta["persistent_note"] = await update_persistent_note(
                 persistent_note,
                 user_text,
                 full_response,

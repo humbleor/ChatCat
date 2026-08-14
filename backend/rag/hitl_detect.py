@@ -115,7 +115,7 @@ def _cluster_docs(docs: list[dict]) -> dict[str, int]:
 def _detect_scope(docs: list[dict]) -> Optional[HitlDecision]:
     counts = _cluster_docs(docs)
     qualified = [os.path.splitext(name)[0] or name for name, n in counts.items() if n >= _MIN_CLUSTER_SIZE]
-    if len(qualified) < 2:
+    if len(qualified) < 3:
         return None
     prompt = "我找到了多个可能相关的知识库方向，请选择你想继续查询的方向。"
     return HitlDecision(

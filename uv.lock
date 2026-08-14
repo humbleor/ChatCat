@@ -509,6 +509,7 @@ dependencies = [
 [package.optional-dependencies]
 dev = [
     { name = "black" },
+    { name = "langsmith" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "ruff" },
@@ -517,6 +518,7 @@ dev = [
 [package.dev-dependencies]
 dev = [
     { name = "black" },
+    { name = "langsmith" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "ruff" },
@@ -535,6 +537,7 @@ requires-dist = [
     { name = "langchain-text-splitters", specifier = ">=0.2.2" },
     { name = "langgraph", specifier = ">=0.2.31" },
     { name = "langgraph-checkpoint-postgres", specifier = ">=2.0.0" },
+    { name = "langsmith", marker = "extra == 'dev'", specifier = ">=0.1.0" },
     { name = "msoffcrypto-tool" },
     { name = "openpyxl" },
     { name = "passlib", extras = ["bcrypt"], specifier = ">=1.7.4" },
@@ -564,6 +567,7 @@ provides-extras = ["dev"]
 [package.metadata.requires-dev]
 dev = [
     { name = "black", specifier = ">=24.0.0" },
+    { name = "langsmith", specifier = ">=0.1.0" },
     { name = "pytest", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", specifier = ">=0.23.0" },
     { name = "ruff", specifier = ">=0.6.0" },
