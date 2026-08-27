@@ -1,9 +1,10 @@
 import os
-from typing import List, Optional, TypedDict
+from typing import List, Literal, Optional, TypedDict
 
 from dotenv import load_dotenv
 from langchain.chat_models import init_chat_model
 from langgraph.graph import END, StateGraph
+from pydantic import BaseModel, Field
 
 from backend.agent.tools import emit_rag_step
 from backend.rag.rag_utils import (
@@ -66,24 +67,28 @@ GRADE_PROMPT = (
 )
 
 
-def _parse_grade(content: str) -> str:
-    """从打分模型的文本输出解析 yes/no；解析不出返回 unknown。"""
-    text = (content or "").strip().lower()
-    if "yes" in text:
-        return "yes"
-    if "no" in text:
-        return "no"
-    return "unknown"
+class GradeResult(BaseModel):
+    """文档相关性判定（LLM 结构化输出，取代旧 _parse_grade 子串匹配）。"""
+
+    relevant: Literal["yes", "no", "unsure"] = Field(
+        default="unsure",
+        description="yes=明确相关；no=明确不相关；unsure=拿不准（默认值）",
+    )
+    confidence: float = Field(
+        ge=0.0, le=1.0, default=0.5,
+        description="置信度 0-1；>=0.6 视为高置信度",
+    )
+    reason: str = Field(default="", description="判断理由（一句话），写入 rag_trace 方便 debug")
 
 
-def _parse_strategy(content: str) -> str:
-    """从重写模型的文本输出解析扩展策略；默认 step_back。"""
-    text = (content or "").strip().lower()
-    if "complex" in text:
-        return "complex"
-    if "hyde" in text:
-        return "hyde"
-    return "step_back"
+class StrategyResult(BaseModel):
+    """查询扩展策略选择（LLM 结构化输出，取代旧 _parse_strategy 子串匹配）。"""
+
+    strategy: Literal["step_back", "hyde", "complex"] = Field(
+        default="step_back",
+        description="step_back=抽象化原问题；hyde=生成假设文档；complex=两者都做（默认 step_back）",
+    )
+    reason: str = Field(default="", description="选择理由（一句话）")
 
 
 class RAGState(TypedDict):
@@ -171,29 +176,45 @@ def grade_documents_node(state: RAGState) -> RAGState:
     emit_rag_step("📊", "正在评估文档相关性...")
     question = state["question"]
     context = state.get("context", "")
-    score = "unknown"
+
+    # 默认评分（LLM 失败时按"不能确定 → 重写"保守策略，与原逻辑一致）
+    decision_ok = False
+    score_label = "unknown"
+    confidence = 0.0
+    reason = ""
+
     try:
         if not grader:
             raise RuntimeError("grader 模型未配置")
         prompt = GRADE_PROMPT.format(question=question, context=context)
-        response = grader.invoke([{"role": "user", "content": prompt}])
-        content = response.content if hasattr(response, "content") else str(response)
-        score = _parse_grade(content)
-    except Exception:
-        # 打分失败时降级为“需要重写查询”，避免整个对话因单个 LLM 调用崩溃
-        score = "unknown"
-    route = "generate_answer" if score == "yes" else "rewrite_question"
+        result: GradeResult = grader.with_structured_output(GradeResult).invoke(
+            [{"role": "user", "content": prompt}]
+        )
+        # yes + 高 confidence 才放行；unsure + 极高 confidence 也可放行
+        decision_ok = (result.relevant == "yes" and result.confidence >= 0.6) or (
+            result.relevant == "unsure" and result.confidence >= 0.85
+        )
+        score_label = result.relevant
+        confidence = result.confidence
+        reason = result.reason
+    except Exception as e:
+        # 打分失败时降级为"需要重写查询"，与原逻辑一致
+        emit_rag_step("⚠️", "评估异常，降级到重写", f"err: {str(e)[:80]}")
+
+    route = "generate_answer" if decision_ok else "rewrite_question"
     if route == "generate_answer":
-        emit_rag_step("✅", "文档相关性评估通过", f"评分: {score}")
+        emit_rag_step("✅", "文档相关性评估通过", f"评分: {score_label} (conf={confidence:.2f})")
     else:
-        emit_rag_step("⚠️", "文档相关性不足，将重写查询", f"评分: {score}")
-    grade_update = {
-        "grade_score": score,
+        emit_rag_step("⚠️", "文档相关性不足，将重写查询", f"评分: {score_label} (conf={confidence:.2f})")
+
+    rag_trace = state.get("rag_trace", {}) or {}
+    rag_trace.update({
+        "grade_score": score_label,
         "grade_route": route,
         "rewrite_needed": route == "rewrite_question",
-    }
-    rag_trace = state.get("rag_trace", {}) or {}
-    rag_trace.update(grade_update)
+        "grade_confidence": confidence,
+        "grade_reason": reason,
+    })
     return {"route": route, "rag_trace": rag_trace}
 
 
@@ -202,6 +223,7 @@ def rewrite_question_node(state: RAGState) -> RAGState:
     emit_rag_step("✏️", "正在重写查询...")
     router = _get_router_model()
     strategy = "step_back"
+    strategy_reason = ""
     if router:
         prompt = (
             "请根据用户问题选择最合适的查询扩展策略，仅输出策略名。\n"
@@ -211,11 +233,14 @@ def rewrite_question_node(state: RAGState) -> RAGState:
             f"用户问题：{question}"
         )
         try:
-            response = router.invoke([{"role": "user", "content": prompt}])
-            content = response.content if hasattr(response, "content") else str(response)
-            strategy = _parse_strategy(content)
+            result: StrategyResult = router.with_structured_output(StrategyResult).invoke(
+                [{"role": "user", "content": prompt}]
+            )
+            strategy = result.strategy
+            strategy_reason = result.reason
         except Exception:
             strategy = "step_back"
+            strategy_reason = "策略选择失败，默认 step_back"
 
     expanded_query = question
     step_back_question = ""
@@ -238,6 +263,7 @@ def rewrite_question_node(state: RAGState) -> RAGState:
         {
             "rewrite_strategy": strategy,
             "rewrite_query": expanded_query,
+            "rewrite_reason": strategy_reason,
         }
     )
 

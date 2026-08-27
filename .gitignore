@@ -29,6 +29,7 @@ docs/
 
 # else
 study/
+CLAUDE.md
 DEVLOG.md
 
 # SDD workspace (subagent-driven development scratch)

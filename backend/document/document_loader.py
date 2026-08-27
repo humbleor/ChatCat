@@ -3,7 +3,7 @@
 import os
 from typing import Dict, List
 
-from langchain_community.document_loaders import Docx2txtLoader, PyPDFLoader, UnstructuredExcelLoader
+from langchain_community.document_loaders import PyMuPDFLoader, UnstructuredExcelLoader, UnstructuredWordDocumentLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from backend.document.text_sanitizer import sanitize_metadata, sanitize_text
@@ -143,10 +143,10 @@ class DocumentLoader:
 
         if file_lower.endswith(".pdf"):
             doc_type = "PDF"
-            loader = PyPDFLoader(file_path)
+            loader = PyMuPDFLoader(file_path)
         elif file_lower.endswith((".docx", ".doc")):
             doc_type = "Word"
-            loader = Docx2txtLoader(file_path)
+            loader = UnstructuredWordDocumentLoader(file_path)
         elif file_lower.endswith((".xlsx", ".xls")):
             doc_type = "Excel"
             loader = UnstructuredExcelLoader(file_path)

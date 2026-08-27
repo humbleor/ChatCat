@@ -76,6 +76,9 @@ class RagTrace(BaseModel):
     retrieved_chunks: Optional[List[RetrievedChunk]] = None
     initial_retrieved_chunks: Optional[List[RetrievedChunk]] = None
     expanded_retrieved_chunks: Optional[List[RetrievedChunk]] = None
+    grade_confidence: Optional[float] = None
+    grade_reason: Optional[str] = None
+    rewrite_reason: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
