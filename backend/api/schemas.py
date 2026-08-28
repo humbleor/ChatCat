@@ -55,8 +55,8 @@ class RagTrace(BaseModel):
     expansion_type: Optional[str] = None
     hypothetical_doc: Optional[str] = None
     retrieval_stage: Optional[str] = None
-    grade_score: Optional[str] = None
-    grade_route: Optional[str] = None
+    evidence_relevance: Optional[str] = None
+    evidence_answerability: Optional[str] = None
     rewrite_needed: Optional[bool] = None
     rewrite_strategy: Optional[str] = None
     rewrite_query: Optional[str] = None
@@ -76,8 +76,8 @@ class RagTrace(BaseModel):
     retrieved_chunks: Optional[List[RetrievedChunk]] = None
     initial_retrieved_chunks: Optional[List[RetrievedChunk]] = None
     expanded_retrieved_chunks: Optional[List[RetrievedChunk]] = None
-    grade_confidence: Optional[float] = None
-    grade_reason: Optional[str] = None
+    evidence_confidence: Optional[float] = None
+    evidence_reason: Optional[str] = None
     rewrite_reason: Optional[str] = None
 
 

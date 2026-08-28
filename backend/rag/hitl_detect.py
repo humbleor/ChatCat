@@ -6,8 +6,20 @@
 """
 
 import os
+import re
 from dataclasses import dataclass
 from typing import Optional
+
+# 推理模型（DeepSeek-R1 / Qwen3-Thinking 等）把思考过程包在 <think>...</think> 里，
+# 真正的回答在闭合标签之后；判 HITL 前必须剥掉，否则 startswith("NO") 检测失效、
+# 触发误判的澄清追问。
+_THINK_RE = re.compile(r"<think>[\s\S]*?</think>", re.DOTALL)
+
+
+def _strip_think(text: str) -> str:
+    """剥掉 <think>...</think> 块并去掉首尾空白。"""
+    return _THINK_RE.sub("", text).strip()
+
 
 MAX_HITL_ROUNDS = 3
 HITL_STATUSES = {"needs_clarification", "needs_scope_selection", "no_knowledge"}
@@ -166,8 +178,7 @@ def detect_hitl(question: str, docs: list[dict], router_model=None, history=None
 
 
 def _judge_clarification(question: str, router_model, history=None) -> Optional[str]:
-    """router LLM 判 query 是否歧义/缺槽位；是则返回生成的追问，否则 None。
-    """
+    """router LLM 判 query 是否歧义/缺槽位；是则返回生成的追问，否则 None。"""
     prompt = (
         "判断下面这个知识库查询是否缺乏回答所需的关键信息（歧义或缺槽位）。\n"
         "如果查询使用了「该」「这个」「此」「上述」等指代词，请结合最近对话判断其"
@@ -178,7 +189,7 @@ def _judge_clarification(question: str, router_model, history=None) -> Optional[
     )
     try:
         res = router_model.invoke([{"role": "user", "content": prompt}])
-        text = _safe_text(getattr(res, "content", str(res)))
+        text = _strip_think(_safe_text(getattr(res, "content", str(res))))
         if text.upper().startswith("NO") or not text:
             return None
         return text

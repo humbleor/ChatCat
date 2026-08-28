@@ -1,5 +1,57 @@
 import type { GroupedRagStep, Message, RagStep, RagTrace } from '@/types/chat';
 
+// 推理模型（DeepSeek-R1 / Qwen3-Thinking）的 `<think>...</think>` 块。
+// 流式状态机：进入 think 后立即把内容路由到 thinkingText（不写入 text），
+// 等 `</think>` 才恢复写 text——避免思考内容闪现给用户。
+// 假设：标签作为原子 token 整体到达 chunk，不跨 chunk 边界（DeepSeek-R1 API 实测如此）。
+const _THINK_OPEN = '<think>';
+const _THINK_CLOSE = '</think>';
+const _THINK_RE = /<think>[\s\S]*?<\/think>/g;
+
+interface _ThinkState { hiding: boolean }
+
+/**
+ * 消费一段入站 content，把 think 块内容路由到 hidden，text 内容路由到 visible。
+ * 单次扫描：找到 <think> → 切到隐藏态；找到 </think> → 切回可见态。
+ */
+export function consumeThink(
+  input: string,
+  state: _ThinkState,
+): { visible: string; hidden: string; hiding: boolean } {
+  let remaining = input;
+  let visible = '';
+  let hidden = '';
+  let hiding = state.hiding;
+  while (remaining.length > 0) {
+    const marker = hiding ? _THINK_CLOSE : _THINK_OPEN;
+    const idx = remaining.indexOf(marker);
+    if (idx === -1) {
+      // 标签原子：剩余整段要么全可见要么全隐藏。
+      if (hiding) hidden += remaining;
+      else visible += remaining;
+      remaining = '';
+      continue;
+    }
+    if (hiding) {
+      hidden += remaining.slice(0, idx);
+      remaining = remaining.slice(idx + marker.length);
+      hiding = false;
+    } else {
+      visible += remaining.slice(0, idx);
+      remaining = remaining.slice(idx + marker.length);
+      hiding = true;
+    }
+  }
+  return { visible, hidden, hiding };
+}
+
+/** 单次切分：把历史消息里 inline 的 `<think>...</think>` 抽到 thinkingText。 */
+export function splitThinking(text: string): { text: string; thinkingText: string } {
+  const thinkingText = (text.match(_THINK_RE) || []).join('').trim();
+  const cleaned = text.replace(_THINK_RE, '').trim();
+  return { text: cleaned, thinkingText };
+}
+
 export function appendRagStepToGroups(prev: GroupedRagStep[], step: RagStep): GroupedRagStep[] {
   const groups = prev ? [...prev] : [];
   const g = step.group || null;
@@ -36,8 +88,17 @@ export function appendRagStepToGroups(prev: GroupedRagStep[], step: RagStep): Gr
  */
 export function applySseEvent(msg: Message, data: any): Message {
   switch (data?.type) {
-    case 'content':
-      return { ...msg, isThinking: false, text: (msg.text || '') + (data.content || '') };
+    case 'content': {
+      const incoming = data.content || '';
+      const { visible, hidden, hiding } = consumeThink(incoming, { hiding: msg._hidingThink || false });
+      return {
+        ...msg,
+        isThinking: false,
+        text: (msg.text || '') + visible,
+        thinkingText: (msg.thinkingText || '') + hidden,
+        _hidingThink: hiding,
+      };
+    }
     case 'rag_step':
       return {
         ...msg,

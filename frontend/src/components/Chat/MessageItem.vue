@@ -22,6 +22,7 @@
         <HitlMessage v-else-if="msg.hitl" :msg="msg" />
 
         <template v-else>
+          <ThinkingBlock v-if="msg.thinkingText || msg._hidingThink" :msg="msg" />
           <MessageContent :text="msg.text" :is-user="false" :msg-index="msgIndex" @cite-click="onCiteClick" />
           <References ref="referencesRef" :msg="msg" :msg-index="msgIndex" @cite-click="onCiteClick" />
           <RetrievalTraceDetails :msg="msg" />
@@ -35,6 +36,7 @@
 import { ref } from 'vue';
 import MessageContent from './MessageContent.vue';
 import ThinkingTrace from './ThinkingTrace.vue';
+import ThinkingBlock from './ThinkingBlock.vue';
 import References from './References.vue';
 import RetrievalTraceDetails from './RetrievalTraceDetails.vue';
 import HitlMessage from './HitlMessage.vue';

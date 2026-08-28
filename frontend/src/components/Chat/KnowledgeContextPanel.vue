@@ -24,7 +24,6 @@
             <strong>本次 Agent 运行</strong>
             <small>{{ shortSessionId }}</small>
           </div>
-          <span v-if="totalDuration">{{ totalDuration }}</span>
         </div>
 
         <div class="run-timeline">
@@ -195,11 +194,6 @@ const confidenceDescription = computed(() => {
   if (confidence.value >= 85) return '来源相关性较高，证据之间未发现明显冲突。';
   if (confidence.value >= 60) return '证据基本可用，建议同时查看原始引用。';
   return '证据支撑较弱，请谨慎使用并进一步核验。';
-});
-
-const totalDuration = computed(() => {
-  const total = (latestMessage.value?.ragSteps || []).reduce((sum, step) => sum + Number(step.elapsed_ms || 0), 0);
-  return total > 0 ? formatMilliseconds(total) : '';
 });
 
 const formatMilliseconds = (milliseconds: number) => {

@@ -93,6 +93,10 @@ export interface Message {
   ragTrace?: RagTrace | null;
   ragSteps?: RagStep[];
   _groupedSteps?: GroupedRagStep[];
+  /** 推理模型输出中 `<think>...</think>` 块的内容（折叠展示）。流式累积；历史消息从 text 内解析填入。 */
+  thinkingText?: string;
+  /** transient: 流式消费时是否正位于 <think>...</think> 内；不持久化 */
+  _hidingThink?: boolean;
   hitl?: HitlRequest | null;
 }
 

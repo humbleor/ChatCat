@@ -19,7 +19,7 @@ load_dotenv()
 API_KEY = os.getenv("LLM_API_KEY")
 MODEL = os.getenv("LLM_MODEL")
 BASE_URL = os.getenv("LLM_BASE_URL")
-GRADE_MODEL = os.getenv("LLM_GRADE_MODEL", "gpt-4.1")
+GRADE_MODEL = os.getenv("LLM_GRADE_MODEL")
 
 _grader_model = None
 _router_model = None
@@ -75,7 +75,9 @@ class GradeResult(BaseModel):
         description="yes=明确相关；no=明确不相关；unsure=拿不准（默认值）",
     )
     confidence: float = Field(
-        ge=0.0, le=1.0, default=0.5,
+        ge=0.0,
+        le=1.0,
+        default=0.5,
         description="置信度 0-1；>=0.6 视为高置信度",
     )
     reason: str = Field(default="", description="判断理由（一句话），写入 rag_trace 方便 debug")
@@ -187,9 +189,7 @@ def grade_documents_node(state: RAGState) -> RAGState:
         if not grader:
             raise RuntimeError("grader 模型未配置")
         prompt = GRADE_PROMPT.format(question=question, context=context)
-        result: GradeResult = grader.with_structured_output(GradeResult).invoke(
-            [{"role": "user", "content": prompt}]
-        )
+        result: GradeResult = grader.with_structured_output(GradeResult).invoke([{"role": "user", "content": prompt}])
         # yes + 高 confidence 才放行；unsure + 极高 confidence 也可放行
         decision_ok = (result.relevant == "yes" and result.confidence >= 0.6) or (
             result.relevant == "unsure" and result.confidence >= 0.85
@@ -207,14 +207,19 @@ def grade_documents_node(state: RAGState) -> RAGState:
     else:
         emit_rag_step("⚠️", "文档相关性不足，将重写查询", f"评分: {score_label} (conf={confidence:.2f})")
 
+    # grade_* → evidence_* 重命名：字段名对齐前端 RagTraceFields，语义用中文标签固化（前端直显）。
+    relevance_labels = {"yes": "相关", "no": "不相关", "unsure": "拿不准"}
+    answerability_labels = {"generate_answer": "可回答", "rewrite_question": "需要改写"}
     rag_trace = state.get("rag_trace", {}) or {}
-    rag_trace.update({
-        "grade_score": score_label,
-        "grade_route": route,
-        "rewrite_needed": route == "rewrite_question",
-        "grade_confidence": confidence,
-        "grade_reason": reason,
-    })
+    rag_trace.update(
+        {
+            "evidence_relevance": relevance_labels.get(score_label, score_label),
+            "evidence_answerability": answerability_labels.get(route, route),
+            "rewrite_needed": route == "rewrite_question",
+            "evidence_confidence": confidence,
+            "evidence_reason": reason,
+        }
+    )
     return {"route": route, "rag_trace": rag_trace}
 
 

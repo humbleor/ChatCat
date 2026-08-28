@@ -2,7 +2,7 @@ import { defineStore } from 'pinia';
 import { useAuthStore } from './auth';
 import { useSessionStore } from './sessions';
 import api from '@/utils/api';
-import { applySseEvent, appendRagStepToGroups as groupSteps } from '@/utils/sse';
+import { applySseEvent, appendRagStepToGroups as groupSteps, splitThinking } from '@/utils/sse';
 import type { Message, RagStep, GroupedRagStep } from '@/types/chat';
 
 export const useChatStore = defineStore('chat', {
@@ -71,11 +71,16 @@ export const useChatStore = defineStore('chat', {
     },
 
     mapServerMessages(messages: any[]): Message[] {
-      return (messages || []).map((msg: any) => ({
-        text: msg.content,
-        isUser: msg.type === 'human',
-        ragTrace: msg.rag_trace || null,
-      }));
+      return (messages || []).map((msg: any) => {
+        const rawText = msg.content || '';
+        const { text, thinkingText } = splitThinking(rawText);
+        return {
+          text,
+          isUser: msg.type === 'human',
+          ragTrace: msg.rag_trace || null,
+          ...(thinkingText ? { thinkingText } : {}),
+        };
+      });
     },
 
     mergeCachedSessionsIntoHistory() {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applySseEvent } from './sse';
+import { applySseEvent, consumeThink, splitThinking } from './sse';
 import type { Message } from '@/types/chat';
 
 describe('applySseEvent', () => {
@@ -36,5 +36,64 @@ describe('applySseEvent', () => {
     const out = applySseEvent(msg, { type: 'error', content: 'boom' });
     expect(out.isThinking).toBe(false);
     expect(out.text).toContain('[Error: boom]');
+  });
+
+  it('routes <think>...</think> block to thinkingText and hides from text', () => {
+    const msg = { text: '', isUser: false, isThinking: true } as Message;
+    const out = applySseEvent(msg, { type: 'content', content: '<think>reasoning</think>真实回答' });
+    expect(out.text).toBe('真实回答');
+    expect(out.thinkingText).toBe('reasoning');
+    expect(out._hidingThink).toBe(false);
+  });
+
+  it('suppresses <think> content across multiple chunks via state machine', () => {
+    let msg = { text: '', isUser: false, isThinking: true } as Message;
+    msg = applySseEvent(msg, { type: 'content', content: '<think>reas' });
+    expect(msg.text).toBe('');
+    expect(msg.thinkingText).toBe('reas');
+    expect(msg._hidingThink).toBe(true);
+    msg = applySseEvent(msg, { type: 'content', content: 'oning跨 chunk</think>\n真实' });
+    expect(msg.text).toBe('\n真实');
+    expect(msg.thinkingText).toBe('reasoning跨 chunk');
+    expect(msg._hidingThink).toBe(false);
+    msg = applySseEvent(msg, { type: 'content', content: '回答' });
+    expect(msg.text).toBe('\n真实回答');
+  });
+});
+
+describe('consumeThink', () => {
+  it('returns empty visible when input is fully inside think', () => {
+    const { visible, hidden, hiding } = consumeThink('<think>reasoning</think>', { hiding: false });
+    expect(visible).toBe('');
+    expect(hidden).toBe('reasoning');
+    expect(hiding).toBe(false);
+  });
+
+  it('resumes visible after </think>', () => {
+    const { visible, hidden, hiding } = consumeThink('<think>x</think>Hi', { hiding: false });
+    expect(visible).toBe('Hi');
+    expect(hidden).toBe('x');
+    expect(hiding).toBe(false);
+  });
+
+  it('keeps hiding=true when </think> not yet arrived', () => {
+    const { visible, hidden, hiding } = consumeThink('more thinking', { hiding: true });
+    expect(visible).toBe('');
+    expect(hidden).toBe('more thinking');
+    expect(hiding).toBe(true);
+  });
+});
+
+describe('splitThinking', () => {
+  it('extracts inline think block from historical message text', () => {
+    const { text, thinkingText } = splitThinking('<think>reasoning</think>真实回答');
+    expect(text).toBe('真实回答');
+    expect(thinkingText).toBe('<think>reasoning</think>');
+  });
+
+  it('returns empty thinkingText when no think block present', () => {
+    const { text, thinkingText } = splitThinking('纯回答，无 think 块');
+    expect(text).toBe('纯回答，无 think 块');
+    expect(thinkingText).toBe('');
   });
 });
