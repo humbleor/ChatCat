@@ -41,7 +41,7 @@ export interface RagTraceFields {
   rerank_model?: string;
   rerank_error?: string;
   retrieval_empty?: boolean;
-  rewrite_method?: 'step_back' | 'hyde';
+  rewrite_method?: 'step_back' | 'hyde' | 'complex';
   step_back_question?: string;
   hyde_document?: string;
   rewritten_query?: string;

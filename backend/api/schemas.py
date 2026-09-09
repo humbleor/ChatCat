@@ -79,6 +79,9 @@ class RagTrace(BaseModel):
     evidence_confidence: Optional[float] = None
     evidence_reason: Optional[str] = None
     rewrite_reason: Optional[str] = None
+    sub_questions: Optional[List[str]] = None
+    sub_agent_count: Optional[int] = None
+    synthesis_merged_count: Optional[int] = None
 
 
 class ChatResponse(BaseModel):

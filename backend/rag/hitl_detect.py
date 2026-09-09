@@ -6,20 +6,10 @@
 """
 
 import os
-import re
 from dataclasses import dataclass
 from typing import Optional
 
-# 推理模型（DeepSeek-R1 / Qwen3-Thinking 等）把思考过程包在 <think>...</think> 里，
-# 真正的回答在闭合标签之后；判 HITL 前必须剥掉，否则 startswith("NO") 检测失效、
-# 触发误判的澄清追问。
-_THINK_RE = re.compile(r"<think>[\s\S]*?</think>", re.DOTALL)
-
-
-def _strip_think(text: str) -> str:
-    """剥掉 <think>...</think> 块并去掉首尾空白。"""
-    return _THINK_RE.sub("", text).strip()
-
+from backend.rag.rag_utils import strip_think
 
 MAX_HITL_ROUNDS = 3
 HITL_STATUSES = {"needs_clarification", "needs_scope_selection", "no_knowledge"}
@@ -189,7 +179,7 @@ def _judge_clarification(question: str, router_model, history=None) -> Optional[
     )
     try:
         res = router_model.invoke([{"role": "user", "content": prompt}])
-        text = _strip_think(_safe_text(getattr(res, "content", str(res))))
+        text = strip_think(_safe_text(getattr(res, "content", str(res))))
         if text.upper().startswith("NO") or not text:
             return None
         return text

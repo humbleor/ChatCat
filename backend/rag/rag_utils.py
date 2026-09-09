@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from collections import defaultdict
 from typing import Any, Dict, List, Tuple
 
@@ -39,6 +40,19 @@ def _get_rerank_endpoint() -> str:
         return ""
     host = RERANK_BINDING_HOST.strip().rstrip("/")
     return host if host.endswith("/v1/rerank") else f"{host}/v1/rerank"
+
+
+THINK_RE = re.compile(r"<think>[\s\S]*?</think>", re.DOTALL)
+
+
+def strip_think(text: str) -> str:
+    """剥掉推理模型（DeepSeek-R1 / MiniMax-M3 等）输出的 <think>...</think> 块并去首尾空白。
+
+    推理模型会把思考过程包在 <think> 里，真正的回答在闭合标签之后。
+    不剥掉的话，下游的 JSON 解析、startswith 检查、关键词匹配等都会因为前缀污染失效。
+    无 think 块时是 no-op。
+    """
+    return THINK_RE.sub("", text).strip()
 
 
 def _merge_to_parent_level(docs: List[dict], threshold: int = 2) -> Tuple[List[dict], int]:
@@ -241,6 +255,92 @@ def step_back_expand(query: str) -> dict:
         "step_back_answer": step_back_answer,
         "expanded_query": expanded_query,
     }
+
+
+MAX_SUB_QUESTIONS = 5
+
+# 多实体连接词：触发 decompose 的标识
+_MULTI_ENTITY_CONNECTOR_RE = re.compile(r"和|与|及|对比|区别|差异|分别|、")
+# entity-like 片段：ASCII 字母开头的标识符（含 -_）OR 连续中文≥2字。
+# 注意 [\w] 在 Python 3 默认包含 Unicode，会把汉字一起吞掉，所以 ASCII 部分必须显式列出。
+_ENTITY_LIKE_RE = re.compile(r"[A-Za-z][A-Za-z0-9_\-]*|[一-龥]{2,}")
+
+
+def _regex_split_multi_entity(query: str) -> List[str]:
+    """LLM 未拆分时的 regex 兜底：取首个连接词切成左右两半。
+
+    仅处理最常见的"实体A 和 实体B 余下"结构，命中不了就返回 []。
+    """
+    m = _MULTI_ENTITY_CONNECTOR_RE.search(query)
+    if not m:
+        return []
+    before = query[: m.start()].strip()
+    after = query[m.end():].strip()
+    # before 必须形似单个 entity（不能再含 connector，否则说明结构太复杂放弃 regex）
+    if not before or _MULTI_ENTITY_CONNECTOR_RE.search(before):
+        return []
+    after_match = _ENTITY_LIKE_RE.match(after)
+    if not after_match:
+        return []
+    entity2 = after_match.group(0)
+    if entity2 == before:
+        return []
+    return [before, entity2]
+
+
+def decompose_question(query: str) -> dict:
+    """将多实体/多主题问题拆分为子问题，单主题则返回 [query]。"""
+    model = _get_stepback_model()
+    if not model:
+        # 无模型时仍走一次 regex 兜底，让明显多实体 query 至少有两条子问题
+        regex_split = _regex_split_multi_entity(query)
+        return {"sub_questions": regex_split or [query]}
+    prompt = (
+        "请将用户问题拆分为若干个自包含的子问题，用于分别检索。\n"
+        "规则：\n"
+        f"- 仅当问题包含多个实体或多个主题（如对比、列举、A和B、A/B/C）时才拆分；单主题问题保持不变。\n"
+        "- 即使实体名称相似，只要指代不同对象就视为多个实体，必须拆分。\n"
+        f"- 最多 {MAX_SUB_QUESTIONS} 个子问题，超过则合并相近的。\n"
+        "- 每个子问题必须自包含，不得使用『上述』『其』等指代原问题的词。\n"
+        "- 严格输出 JSON 数组，例如 [\"子问题1\", \"子问题2\"]，不要任何解释或 markdown。\n"
+        f"用户问题：{query}"
+    )
+    try:
+        raw = (model.invoke(prompt).content or "").strip()
+    except Exception:
+        return {"sub_questions": [query]}
+
+    # 推理模型会先输出 <think>...</think>，必须剥掉否则 JSON 解析挂
+    raw = strip_think(raw)
+
+    # 容忍 ```json ... ``` 包裹
+    if raw.startswith("```"):
+        raw = raw.strip("`")
+        if raw.lower().startswith("json"):
+            raw = raw[4:]
+        raw = raw.strip()
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        parsed = None
+
+    sub_questions: List[str] = [query]
+    if isinstance(parsed, list) and parsed:
+        cleaned = [str(item).strip() for item in parsed if str(item).strip()]
+        if cleaned:
+            sub_questions = cleaned
+
+    if len(sub_questions) > MAX_SUB_QUESTIONS:
+        sub_questions = sub_questions[:MAX_SUB_QUESTIONS]
+
+    # LLM 兜底返回 [原问题]（=没真的拆）且 query 看起来明显多实体，regex 兜底再试一次
+    if sub_questions == [query]:
+        regex_split = _regex_split_multi_entity(query)
+        if regex_split:
+            sub_questions = regex_split
+
+    return {"sub_questions": sub_questions}
 
 
 def retrieve_documents(query: str, top_k: int = RETRIEVAL_TOP_K) -> Dict[str, Any]:
