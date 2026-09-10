@@ -1,7 +1,7 @@
 <template>
   <div class="app-page">
-    <div class="aurora-orb aurora-orb-one" aria-hidden="true"></div>
-    <div class="aurora-orb aurora-orb-two" aria-hidden="true"></div>
+    <div class="glow glow-one" aria-hidden="true"></div>
+    <div class="glow glow-two" aria-hidden="true"></div>
 
     <div class="app-wrapper">
       <Sidebar :theme="theme" @toggle-theme="toggleTheme" />
