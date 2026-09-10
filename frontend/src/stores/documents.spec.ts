@@ -15,6 +15,7 @@ vi.mock('@/utils/api', () => ({
 const flushPromises = async () => {
   await Promise.resolve();
   await Promise.resolve();
+  await Promise.resolve();
 };
 
 const createUploadJob = (overrides: Record<string, any> = {}) => ({
@@ -31,6 +32,9 @@ const createUploadJob = (overrides: Record<string, any> = {}) => ({
   ...overrides,
 });
 
+const mockFile = (name: string, size = 1024) =>
+  ({ name, size } as File);
+
 describe('document upload polling', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
@@ -40,7 +44,8 @@ describe('document upload polling', () => {
 
   afterEach(() => {
     const store = useDocumentStore();
-    store.stopUploadJobPolling();
+    store.stopAllUploadJobPolling();
+    store.stopAllDeleteJobPolling();
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
@@ -50,6 +55,7 @@ describe('document upload polling', () => {
     const unmountedBlock = source.match(/onUnmounted\(\(\) => \{([\s\S]*?)\}\);/);
 
     expect(unmountedBlock?.[1]).not.toContain('stopUploadJobPolling');
+    expect(unmountedBlock?.[1]).not.toContain('stopAllUploadJobPolling');
     expect(unmountedBlock?.[1]).toContain('stopAllDeleteJobPolling');
   });
 
@@ -80,31 +86,179 @@ describe('document upload polling', () => {
       return Promise.reject(new Error(`Unexpected GET ${url}`));
     });
 
-    store.isUploading = true;
-    store.selectedFile = { name: 'wuthering-waves.pdf' } as File;
-
-    store.startUploadJobPolling('job_upload_1');
+    store.selectedFiles = [mockFile('wuthering-waves.pdf')];
+    store.initFileJob('wuthering-waves.pdf');
+    store.startUploadJobPolling('wuthering-waves.pdf', 'job_upload_1');
     await flushPromises();
 
-    expect(store.activeUploadJobId).toBe('job_upload_1');
-    expect(store.uploadProgress).toBe('正在向量化入库：450 / 770');
-    expect(store.uploadSteps.find((step) => step.key === 'vector_store')).toMatchObject({
+    const job = store.fileJobs['wuthering-waves.pdf'];
+    expect(job.jobId).toBe('job_upload_1');
+    expect(job.message).toBe('正在向量化入库：450 / 770');
+    expect(job.steps.find((step) => step.key === 'vector_store')).toMatchObject({
       percent: 58,
       status: 'running',
     });
-    expect(store.uploadPollTimer).not.toBeNull();
+    expect(store.uploadPollTimers['wuthering-waves.pdf']).toBeDefined();
 
-    await vi.advanceTimersByTimeAsync(1000);
+    await vi.advanceTimersByTimeAsync(1500);
     await flushPromises();
 
-    expect(store.uploadProgress).toBe('文档处理完成');
-    expect(store.uploadSteps.find((step) => step.key === 'vector_store')).toMatchObject({
-      percent: 100,
-      status: 'completed',
-    });
-    expect(store.isUploading).toBe(false);
-    expect(store.selectedFile).toBeNull();
-    expect(store.uploadPollTimer).toBeNull();
+    expect(store.fileJobs['wuthering-waves.pdf']).toBeUndefined();
+    expect(store.selectedFiles).toEqual([]);
+    expect(store.uploadPollTimers['wuthering-waves.pdf']).toBeUndefined();
     expect(store.documents).toEqual([{ filename: 'wuthering-waves.pdf', file_type: 'PDF', chunk_count: 770 }]);
+  });
+
+  it('uploads multiple files in parallel and tracks per-file jobs independently', async () => {
+    const store = useDocumentStore();
+
+    const completedA = createUploadJob({
+      job_id: 'job_a',
+      status: 'completed',
+      message: '文档处理完成',
+      steps: createUploadJob().steps.map((step) => ({ ...step, status: 'completed', percent: 100 })),
+    });
+    const completedB = createUploadJob({
+      job_id: 'job_b',
+      status: 'completed',
+      message: '文档处理完成',
+      steps: createUploadJob().steps.map((step) => ({ ...step, status: 'completed', percent: 100 })),
+    });
+
+    let postCallIndex = 0;
+    vi.mocked(api.post).mockImplementation((url: string) => {
+      if (url === '/documents/upload/async') {
+        const jobId = postCallIndex === 0 ? 'job_a' : 'job_b';
+        postCallIndex += 1;
+        return Promise.resolve({ data: { job_id: jobId, message: '文件已上传' } });
+      }
+      return Promise.reject(new Error(`Unexpected POST ${url}`));
+    });
+
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/documents') {
+        return Promise.resolve({
+          data: {
+            documents: [
+              { filename: '需求文档.pdf', file_type: 'PDF', chunk_count: 100 },
+              { filename: '接口设计.docx', file_type: 'DOCX', chunk_count: 50 },
+            ],
+          },
+        });
+      }
+      if (url === '/documents/upload/jobs/job_a') return Promise.resolve({ data: completedA });
+      if (url === '/documents/upload/jobs/job_b') return Promise.resolve({ data: completedB });
+      return Promise.reject(new Error(`Unexpected GET ${url}`));
+    });
+
+    store.selectedFiles = [mockFile('需求文档.pdf', 2048), mockFile('接口设计.docx', 1024)];
+    await store.uploadDocuments();
+    await flushPromises();
+    await vi.advanceTimersByTimeAsync(1500);
+    await flushPromises();
+
+    expect(postCallIndex).toBe(2);
+    expect(store.selectedFiles).toEqual([]);
+    expect(store.fileJobs['需求文档.pdf']).toBeUndefined();
+    expect(store.fileJobs['接口设计.docx']).toBeUndefined();
+    expect(store.uploadPollTimers['需求文档.pdf']).toBeUndefined();
+    expect(store.uploadPollTimers['接口设计.docx']).toBeUndefined();
+  });
+
+  it('keeps polling on transient errors and only fails after consecutive failures', async () => {
+    const store = useDocumentStore();
+    const completedJob = createUploadJob({
+      status: 'completed',
+      message: '文档处理完成',
+      steps: createUploadJob().steps.map((step) => ({ ...step, status: 'completed', percent: 100 })),
+    });
+
+    const responses = [
+      Promise.reject({ message: 'timeout of 60000ms exceeded' }),
+      Promise.reject({ message: 'timeout of 60000ms exceeded' }),
+      Promise.resolve({ data: completedJob }),
+    ];
+
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/documents') {
+        return Promise.resolve({
+          data: { documents: [{ filename: 'retry.pdf', file_type: 'PDF', chunk_count: 10 }] },
+        });
+      }
+      if (url === '/documents/upload/jobs/job_retry') {
+        const next = responses.shift();
+        return next || Promise.resolve({ data: completedJob });
+      }
+      return Promise.reject(new Error(`Unexpected GET ${url}`));
+    });
+
+    store.selectedFiles = [mockFile('retry.pdf')];
+    store.initFileJob('retry.pdf');
+    store.startUploadJobPolling('retry.pdf', 'job_retry');
+    await flushPromises();
+
+    expect(store.fileJobs['retry.pdf']?.status).toBe('running');
+    expect(store.uploadPollTimers['retry.pdf']).toBeDefined();
+
+    await vi.advanceTimersByTimeAsync(1500);
+    await flushPromises();
+
+    expect(store.fileJobs['retry.pdf']?.status).toBe('running');
+    expect(store.uploadPollTimers['retry.pdf']).toBeDefined();
+
+    await vi.advanceTimersByTimeAsync(1500);
+    await flushPromises();
+
+    expect(store.fileJobs['retry.pdf']).toBeUndefined();
+    expect(store.selectedFiles).toEqual([]);
+    expect(store.uploadPollTimers['retry.pdf']).toBeUndefined();
+  });
+
+  it('keeps a failed file in selectedFiles so the user can retry', async () => {
+    const store = useDocumentStore();
+    const failedJob = createUploadJob({
+      status: 'failed',
+      message: '处理失败',
+      steps: createUploadJob().steps.map((step, i) =>
+        i === 4 ? { ...step, status: 'failed', percent: 0 } : step
+      ),
+    });
+
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url === '/documents') return Promise.resolve({ data: { documents: [] } });
+      if (url === '/documents/upload/jobs/job_fail') return Promise.resolve({ data: failedJob });
+      return Promise.reject(new Error(`Unexpected GET ${url}`));
+    });
+
+    store.selectedFiles = [mockFile('broken.pdf')];
+    store.initFileJob('broken.pdf');
+    store.startUploadJobPolling('broken.pdf', 'job_fail');
+    await flushPromises();
+
+    await vi.advanceTimersByTimeAsync(1500);
+    await flushPromises();
+
+    expect(store.fileJobs['broken.pdf']?.status).toBe('failed');
+    expect(store.selectedFiles.map((f) => f.name)).toEqual(['broken.pdf']);
+    expect(store.uploadPollTimers['broken.pdf']).toBeUndefined();
+  });
+
+  it('removes a selected file and stops its polling', async () => {
+    const store = useDocumentStore();
+    vi.mocked(api.get).mockResolvedValue({ data: createUploadJob() });
+
+    store.selectedFiles = [mockFile('a.pdf'), mockFile('b.pdf')];
+    store.initFileJob('a.pdf');
+    store.initFileJob('b.pdf');
+    store.startUploadJobPolling('a.pdf', 'job_a');
+    store.startUploadJobPolling('b.pdf', 'job_b');
+
+    store.removeSelectedFile('a.pdf');
+
+    expect(store.selectedFiles.map((f) => f.name)).toEqual(['b.pdf']);
+    expect(store.fileJobs['a.pdf']).toBeUndefined();
+    expect(store.fileJobs['b.pdf']).toBeDefined();
+    expect(store.uploadPollTimers['a.pdf']).toBeUndefined();
+    expect(store.uploadPollTimers['b.pdf']).toBeDefined();
   });
 });
