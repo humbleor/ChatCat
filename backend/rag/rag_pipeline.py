@@ -242,7 +242,7 @@ def rewrite_question_node(state: RAGState) -> RAGState:
             "- step_back：包含具体名称、日期、代码等细节，需要先理解通用概念的问题。\n"
             "- hyde：模糊、概念性、需要解释或定义的问题。\n"
             "- complex：多实体、多主题的对比或列举类问题（如『A和B的优缺点』『A、B、C 三者区别』），需要拆分为子问题分别检索。\n"
-            "严格输出 JSON：{\"strategy\": \"step_back|hyde|complex\", \"reason\": \"一句话选择理由\"}，不要其它文字或 markdown。\n"
+            '严格输出 JSON：{"strategy": "step_back|hyde|complex", "reason": "一句话选择理由"}，不要其它文字或 markdown。\n'
             f"用户问题：{question}"
         )
         try:

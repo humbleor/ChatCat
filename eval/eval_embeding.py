@@ -1,13 +1,12 @@
 """Embedding / 检索质量评估：接真实 Milvus 集合，对比 dense / sparse(BM25) / hybrid 三路裸检索。
 
 两阶段 CLI：
-  gen  从 level-3 叶子 chunk 抽样，用快模型生成"自然用户问法"并缓存真值（可复现）
+  gen  从 level-3 叶子 chunk 抽样，用本地模板拼出"自然问句"并缓存真值（可复现、不调 LLM）
   run  对缓存问题逐条跑检索，输出文档级 Hit@k / MRR@k 与严格 chunk 级命中对比表
 
 运行前提：
   1. 基础设施已启动：`docker compose up -d`（Milvus 等）
-  2. `.env` 配好 LLM_API_KEY / LLM_BASE_URL / LLM_FAST_MODEL（gen 阶段生成问题用）
-  3. Milvus 集合已建且有 level-3 叶子 chunk（data/documents 上传过）
+  2. Milvus 集合已建且有 level-3 叶子 chunk（data/documents 上传过）
 
 用法：
   uv run python eval/eval_embeding.py gen --count 30
@@ -19,6 +18,7 @@ import argparse
 import json
 import os
 import random
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -39,24 +39,83 @@ RESULTS_DIR = EVAL_DIR / "results"
 # 检索/真值都限定在叶子层，与线上 retrieve_documents() 的 filter 一致
 LEAF_LEVEL = 3
 
-QUESTION_GEN_PROMPT = (
-    "你是一位正在向知识库问答助手提问的用户。下面是文档中的一段内容：\n"
-    "---\n{chunk_text}\n---\n"
-    "请基于这段内容生成 1 条该用户可能提出的真实问题。要求：\n"
-    "- 用自然、口语化的中文提问，不要照抄片段中的句子或关键词，尽量换一种说法；\n"
-    "- 问题仅凭这段内容就能回答；\n"
-    "- 只输出问题本身，不要任何解释、前缀或多余文字。"
+# 模板式问题生成：完全不调 LLM，保证可复现、零 token。
+# 思路：从 chunk 文本里抽 1~2 个关键短语，按句式模板拼成单行中文问句。
+_TEMPLATES = [
+    "这段内容里提到的{k}是什么？",
+    "{k}在文档里是怎么描述的？",
+    "什么是{k}？它有什么特点？",
+    "请解释一下{k}的含义。",
+    "{a}和{b}有什么区别？",
+    "{file}里关于{k}的说明是什么？",
+]
+_STOPWORDS = {
+    "的", "是", "在", "和", "了", "与", "及", "或", "等", "我们", "你", "它", "他", "她",
+    "这", "那", "一个", "一些", "可以", "通过", "对", "为", "以", "上", "下", "中", "等",
+    "from", "the", "and", "of", "in", "to", "for", "with", "a", "an", "is", "are", "by",
+    "图", "表", "如下", "所示", "分别", "其中", "包括", "使用", "采用", "需要", "本文",
+    "实验", "结果", "分析", "方法", "数据", "模型", "本文", "本节", "工作",
+}
+_KEYWORD_RE = re.compile(
+    r"[A-Za-z][A-Za-z0-9_\-]{2,}"     # 英文术语/缩写
+    r"|[一-龥]{2,8}",                  # 中文 2~8 字短语
 )
+
+
+def _extract_keywords(text: str, limit: int = 3) -> list[str]:
+    """从 chunk 文本里挑 1~limit 个关键词：英文术语优先，其次中文短语，按出现频次/长度排序。"""
+    from collections import Counter
+
+    text = (text or "").strip()
+    if not text:
+        return []
+    counter: Counter = Counter()
+    for m in _KEYWORD_RE.finditer(text):
+        kw = m.group(0).strip()
+        if not kw or kw.lower() in _STOPWORDS:
+            continue
+        if len(kw) == 1 and kw not in {"A", "I"}:
+            continue
+        counter[kw] += 1
+    # 优先按出现次数，再按长度；英文术语靠前
+    sorted_kws = sorted(
+        counter.items(),
+        key=lambda kv: (-kv[1], -len(kv[0]), kv[0]),
+    )
+    return [kw for kw, _ in sorted_kws[:limit]]
+
+
+def _file_stem(filename: str) -> str:
+    """从文件名里抽清爽短名（去扩展名、连字符等）。"""
+    stem = (filename or "").strip()
+    stem = re.sub(r"\.[A-Za-z0-9]+$", "", stem)
+    stem = re.sub(r"[_\-]+", " ", stem)
+    return stem.strip()[:24]
+
+
+def _template_question(text: str, filename: str, rng: random.Random) -> str:
+    """根据 chunk 文本和文件名用模板拼一行问句。"""
+    kws = _extract_keywords(text)
+    if not kws:
+        # 文本无可用短语时用文件名兜底
+        kws = [_file_stem(filename)] or ["这段内容"]
+    rng.shuffle(kws)
+    head = kws[0]
+    tmpl = rng.choice(_TEMPLATES)
+    if "{a}" in tmpl and "{b}" in tmpl and len(kws) >= 2:
+        return tmpl.format(a=kws[0], b=kws[1], k=head, file=_file_stem(filename))
+    return tmpl.format(k=head, file=_file_stem(filename))
 
 
 # ---------- gen：生成并缓存问题真值 ----------
 
 def _get_question_gen_model():
+    # 保留接口以兼容旧用法，但模板生成模式下不会调用模型
     from langchain.chat_models import init_chat_model
 
     model_name = os.getenv("LLM_FAST_MODEL") or os.getenv("LLM_MODEL")
     if not os.getenv("LLM_API_KEY") or not model_name:
-        sys.exit("错误: 缺少 LLM_API_KEY / LLM_MODEL（或 LLM_FAST_MODEL），gen 阶段需要生成问题")
+        return None
     return init_chat_model(
         model=model_name,
         model_provider="openai",
@@ -98,12 +157,29 @@ def _sample_leaf_chunks(store, count: int, seed: int) -> list[dict]:
     return sampled
 
 
-def _generate_question(model, chunk_text: str) -> str:
-    resp = model.invoke(
-        [{"role": "user", "content": QUESTION_GEN_PROMPT.format(chunk_text=chunk_text[:1200])}]
-    )
-    content = resp.content if hasattr(resp, "content") else str(resp)
-    return (content or "").strip()
+def _audit_questions(questions: list) -> None:
+    """生成后轻量审计：覆盖文档数、长度、是否含 <think> 残留、是否过短。"""
+    from collections import Counter
+
+    if not questions:
+        print("⚠️ 审计: 没有可用的样本")
+        return
+    files = Counter(item.get("filename", "") for item in questions)
+    lengths = [len(item["question"]) for item in questions]
+    short = [item for item in questions if len(item["question"]) < 6]
+    think_leak = [item for item in questions if "<think>" in item["question"].lower()]
+    print("\n[样本审计]")
+    print(f"  总样本: {len(questions)}")
+    print(f"  覆盖文档数: {len(files)}")
+    print(f"  问题长度 (min/median/max): {min(lengths)} / {sorted(lengths)[len(lengths)//2]} / {max(lengths)}")
+    if short:
+        print(f"  ⚠️ 过短问题: {len(short)} 条（<6 字）")
+    if think_leak:
+        print(f"  ⚠️ 仍含 <think>: {len(think_leak)} 条")
+    top_files = files.most_common(5)
+    print("  覆盖 top 文档:")
+    for fn, n in top_files:
+        print(f"    - {fn}: {n}")
 
 
 def cmd_gen(args) -> None:
@@ -121,30 +197,34 @@ def cmd_gen(args) -> None:
     if not sampled:
         sys.exit(f"错误: 集合中没有 level-{LEAF_LEVEL} 的非空叶子 chunk，无法生成真值")
 
-    print(f"抽样 {len(sampled)} 个叶子 chunk，开始生成问题（快模型，temperature=0.7）...")
-    model = _get_question_gen_model()
+    print(f"抽样 {len(sampled)} 个叶子 chunk，开始按模板拼装问题（不调 LLM，固定 seed={args.seed}）...")
+    rng = random.Random(args.seed + 1)
     questions = []
     for i, c in enumerate(sampled, 1):
-        try:
-            question = _generate_question(model, c["text"])
-        except Exception as e:
-            print(f"  [{i}/{len(sampled)}] 生成失败，跳过: {e}")
+        text = c.get("text", "") or ""
+        filename = c.get("filename", "")
+        if not text.strip():
+            print(f"  [{i}/{len(sampled)}] 文本为空，跳过")
             continue
+        question = _template_question(text, filename, rng)
         if not question:
+            print(f"  [{i}/{len(sampled)}] 模板生成失败，跳过")
             continue
         questions.append(
             {
                 "question": question,
                 "chunk_id": c.get("chunk_id", ""),
                 "root_chunk_id": c.get("root_chunk_id", ""),
-                "filename": c.get("filename", ""),
+                "filename": filename,
                 "page_number": c.get("page_number", 0),
-                "text": c.get("text", ""),
+                "text": text,
             }
         )
 
     if not questions:
-        sys.exit("错误: 所有问题生成失败，请检查 LLM_API_KEY / LLM_BASE_URL / LLM_FAST_MODEL 配置")
+        sys.exit("错误: 没有任何 chunk 能拼出可用问题")
+
+    _audit_questions(questions)
 
     QUESTIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
     QUESTIONS_FILE.write_text(json.dumps(questions, ensure_ascii=False, indent=2), encoding="utf-8")

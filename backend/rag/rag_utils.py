@@ -275,7 +275,7 @@ def _regex_split_multi_entity(query: str) -> List[str]:
     if not m:
         return []
     before = query[: m.start()].strip()
-    after = query[m.end():].strip()
+    after = query[m.end() :].strip()
     # before 必须形似单个 entity（不能再含 connector，否则说明结构太复杂放弃 regex）
     if not before or _MULTI_ENTITY_CONNECTOR_RE.search(before):
         return []
@@ -302,7 +302,7 @@ def decompose_question(query: str) -> dict:
         "- 即使实体名称相似，只要指代不同对象就视为多个实体，必须拆分。\n"
         f"- 最多 {MAX_SUB_QUESTIONS} 个子问题，超过则合并相近的。\n"
         "- 每个子问题必须自包含，不得使用『上述』『其』等指代原问题的词。\n"
-        "- 严格输出 JSON 数组，例如 [\"子问题1\", \"子问题2\"]，不要任何解释或 markdown。\n"
+        '- 严格输出 JSON 数组，例如 ["子问题1", "子问题2"]，不要任何解释或 markdown。\n'
         f"用户问题：{query}"
     )
     try:
