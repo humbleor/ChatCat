@@ -1,19 +1,21 @@
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from backend.api import api as api_module
-from backend.infra.checkpointer import init_checkpointer
-from backend.infra.database import init_db
-
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 FRONTEND_DIR = BASE_DIR / "frontend" / "dist"
+load_dotenv(BASE_DIR / ".env")
 
 
 def create_app() -> FastAPI:
+    from backend.api import api as api_module
+    from backend.infra.checkpointer import init_checkpointer
+    from backend.infra.database import init_db
+
     app = FastAPI(title="ChatCat Bot API")
 
     @app.on_event("startup")

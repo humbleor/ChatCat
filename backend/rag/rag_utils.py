@@ -5,15 +5,12 @@ from collections import defaultdict
 from typing import Any, Dict, List, Tuple
 
 import requests
-from dotenv import load_dotenv
 from langchain.chat_models import init_chat_model
 
 from backend.document.parent_chunk_store import ParentChunkStore
 from backend.document.text_sanitizer import sanitize_text
 from backend.vector.embedding import embedding_service as _embedding_service
 from backend.vector.milvus_client import get_milvus_store
-
-load_dotenv()
 
 API_KEY = os.getenv("LLM_API_KEY")
 MODEL = os.getenv("LLM_MODEL")

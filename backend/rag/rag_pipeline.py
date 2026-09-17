@@ -1,7 +1,6 @@
 import os
 from typing import List, Literal, Optional, TypedDict
 
-from dotenv import load_dotenv
 from langchain.chat_models import init_chat_model
 from langgraph.graph import END, StateGraph
 from pydantic import BaseModel, Field
@@ -15,8 +14,6 @@ from backend.rag.rag_utils import (
     step_back_expand,
     strip_think,
 )
-
-load_dotenv()
 
 API_KEY = os.getenv("LLM_API_KEY")
 MODEL = os.getenv("LLM_MODEL")

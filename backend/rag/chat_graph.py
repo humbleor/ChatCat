@@ -4,6 +4,7 @@ HITL 用 LangGraph 原生 interrupt/Command(resume)；节点全同步，RAG 步�
 通过 get_stream_writer() 发 custom 事件，供编排层转 SSE。
 """
 
+import os
 import re
 from typing import Callable, Optional, TypedDict
 
@@ -16,6 +17,7 @@ from backend.rag.hitl_detect import (
     compose_question,
     normalize_rag_trace,
 )
+from backend.rag.rag_utils import strip_think
 
 NO_KNOWLEDGE = "知识库中没有找到可靠的相关信息，暂时无法基于知识库回答这个问题。"
 
@@ -98,19 +100,51 @@ def _judge_route(question: str) -> str:
         router = _get_router_model()
         if router is not None:
             prompt = (
-                "判断以下用户问题是否需要检索知识库文档。\n"
-                "若问题涉及特定文档/资料/知识库内容 → 只输出 retrieve；"
-                "否则（寒暄、闲聊、观点、天气等）→ 只输出 generate。\n"
+                "你是一个知识库助手的路由器。判断用户问题是否需要检索 KB 文档。\n\n"
+                "→ retrieve（默认）的场景：\n"
+                "  - 询问概念/含义/解释/定义（如'什么是 X'、'X 的含义'）\n"
+                "  - 询问文档中的具体说明、参数、流程、对比\n"
+                "  - 询问技术名词、术语解释\n"
+                "  - 涉及论文/手册/文档中具体内容\n\n"
+                "→ generate 的场景：\n"
+                "  - 寒暄、闲聊、问候、天气 \n"
+                "  - 询问主观观点\n"
+                "  - 纯数学/编程/通识计算（与具体文档无关）\n\n"
+                "不确定时一律 retrieve。只输出 retrieve 或 generate，一个词。\n"
                 f"用户问题：{question}"
             )
             res = router.invoke([{"role": "user", "content": prompt}])
-            text = str(getattr(res, "content", str(res)) or "").strip().lower()
-            if "retrieve" in text:
-                return "retrieve"
-            if "generate" in text:
-                return "generate"
-    except Exception:
-        pass
+            raw = res.content
+            # content 可能是 str 或 list[dict]，统一抽 text
+            if isinstance(raw, list):
+                text = "".join(
+                    (b.get("text", "") if isinstance(b, dict) and b.get("type") == "text"
+                     else (b if isinstance(b, str) else ""))
+                    for b in raw
+                )
+            else:
+                text = str(raw)
+            cleaned = strip_think(text).strip().strip("`")
+            if cleaned.lower().startswith("json"):
+                cleaned = cleaned[4:].strip()
+            first_token = cleaned.split()[-1].lower().strip(".,;:!?") if cleaned.split() else ""
+            decision = None
+            if first_token == "retrieve":
+                decision = "retrieve"
+            elif first_token == "generate":
+                decision = "generate"
+            if os.getenv("ROUTER_DEBUG") == "1":
+                import sys
+                print(
+                    f"[router] q={question[:40]!r} | first_token={first_token!r} | decision={decision}",
+                    file=sys.stderr,
+                )
+            if decision:
+                return decision
+    except Exception as e:
+        if os.getenv("ROUTER_DEBUG") == "1":
+            import sys
+            print(f"[router] error: {e!r}", file=sys.stderr)
     return "retrieve"  # 兜底：默认尝试检索
 
 
@@ -338,10 +372,11 @@ def generate(state: ChatState) -> dict:
         messages.append(HumanMessage(content=state["question"]))
 
     model = _get_chat_model()
-    full = ""
+    raw_full = ""
     try:
         for chunk in model.stream(messages):
             content = chunk.content if hasattr(chunk, "content") else str(chunk)
+            # content 可能是 str 或 list[dict]，统一抽 text
             if isinstance(content, list):
                 text = "".join(
                     (
@@ -354,11 +389,21 @@ def generate(state: ChatState) -> dict:
             else:
                 text = str(content)
             if text:
-                full += text
+                raw_full += text
                 writer({"type": "content", "content": text})
     except Exception as e:
         writer({"type": "content", "content": f"\n[Error: {e}]"})
-        full += f"\n[Error: {e}]"
+        raw_full += f"\n[Error: {e}]"
+
+    # 剥推理模型的  块（流式累积后再 strip 更稳）
+    full = strip_think(raw_full).strip()
+
+    # 兜底：retrieve 模式下如果模型完全没回答（推理模型偶发返回空），降级到 NO_KNOWLEDGE
+    # 这样前端能拿到有意义的反馈，而不是空白。
+    if not full and mode == "retrieve" and state.get("docs"):
+        full = NO_KNOWLEDGE
+        writer({"type": "content", "content": NO_KNOWLEDGE})
+
     return {"response": full}
 
 

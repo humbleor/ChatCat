@@ -10,7 +10,6 @@ import logging
 import os
 from datetime import datetime
 
-from dotenv import load_dotenv
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.types import Command
 
@@ -18,8 +17,6 @@ from backend.infra.cache import cache
 from backend.infra.database import SessionLocal
 from backend.models.models import ChatMessage, ChatSession, User
 from backend.rag.hitl_detect import format_hitl_message, normalize_rag_trace
-
-load_dotenv()
 
 logger = logging.getLogger(__name__)
 
