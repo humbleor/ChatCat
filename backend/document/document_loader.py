@@ -65,6 +65,7 @@ class DocumentLoader:
         root_chunks: List[Dict] = []
         page_number = int(base_doc.get("page_number", 0))
         filename = base_doc["filename"]
+        chunk_namespace = base_doc.get("document_id") or filename
 
         level_1_docs = self._splitter_level_1.create_documents([text], [base_doc])
         level_1_counter = 0
@@ -75,7 +76,7 @@ class DocumentLoader:
             level_1_text = (level_1_doc.page_content or "").strip()
             if not level_1_text:
                 continue
-            level_1_id = self._build_chunk_id(filename, page_number, 1, level_1_counter)
+            level_1_id = self._build_chunk_id(chunk_namespace, page_number, 1, level_1_counter)
             level_1_counter += 1
 
             level_1_chunk = {
@@ -95,7 +96,7 @@ class DocumentLoader:
                 level_2_text = (level_2_doc.page_content or "").strip()
                 if not level_2_text:
                     continue
-                level_2_id = self._build_chunk_id(filename, page_number, 2, level_2_counter)
+                level_2_id = self._build_chunk_id(chunk_namespace, page_number, 2, level_2_counter)
                 level_2_counter += 1
 
                 level_2_chunk = {
@@ -115,7 +116,7 @@ class DocumentLoader:
                     level_3_text = (level_3_doc.page_content or "").strip()
                     if not level_3_text:
                         continue
-                    level_3_id = self._build_chunk_id(filename, page_number, 3, level_3_counter)
+                    level_3_id = self._build_chunk_id(chunk_namespace, page_number, 3, level_3_counter)
                     level_3_counter += 1
                     root_chunks.append(
                         {
@@ -132,7 +133,14 @@ class DocumentLoader:
 
         return root_chunks
 
-    def load_document(self, file_path: str, filename: str) -> list[dict]:
+    def load_document(
+        self,
+        file_path: str,
+        filename: str,
+        *,
+        document_id: str = "",
+        is_deleted: bool = False,
+    ) -> list[dict]:
         """
         加载单个文档并分片
         :param file_path: 文件路径
@@ -169,6 +177,9 @@ class DocumentLoader:
 
                 base_doc = {
                     "filename": sanitize_metadata(filename),
+                    "document_id": document_id,
+                    "is_deleted": is_deleted,
+                    "deleted_at": 0,
                     "file_path": sanitize_metadata(file_path),
                     "file_type": sanitize_metadata(doc_type),
                     "page_number": page_num,

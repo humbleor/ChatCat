@@ -31,6 +31,8 @@ from backend.api.schemas import (
     SessionMessagesResponse,
 )
 from backend.document.document_loader import DocumentLoader
+from backend.document.document_registry import ACTIVE, FAILED, document_registry
+from backend.document.document_service import soft_delete_document
 from backend.document.parent_chunk_store import ParentChunkStore
 from backend.infra.auth import (
     authenticate_user,
@@ -50,6 +52,7 @@ from backend.vector.milvus_writer import MilvusWriter
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR.parent / "data"
 UPLOAD_DIR = DATA_DIR / "documents"
+MILVUS_SOFT_DELETE_ENABLED = os.getenv("MILVUS_SOFT_DELETE_ENABLED", "false").lower() == "true"
 
 loader = DocumentLoader()
 parent_chunk_store = ParentChunkStore()
@@ -210,8 +213,13 @@ async def _save_upload_file(file: UploadFile, file_path: Path) -> None:
             f.write(chunk)
 
 
-def _process_upload_job(job_id: str, file_path: str, filename: str) -> None:
-    """后台执行耗时的解析、分块、向量化入库，并持续更新任务进度。"""
+def _process_upload_job(
+    job_id: str,
+    file_path: str,
+    filename: str,
+    document_id: str | None = None,
+) -> None:
+    """Run parsing, chunking, and vector ingestion in the background."""
     failed_step = "cleanup"
     try:
         upload_job_manager.complete_step(job_id, "upload", "文件已保存到服务器")
@@ -219,20 +227,35 @@ def _process_upload_job(job_id: str, file_path: str, filename: str) -> None:
         failed_step = "cleanup"
         upload_job_manager.update_step(job_id, "cleanup", 10, "running", "正在清理同名旧文档")
         milvus_store.init_collection()
-        delete_expr = f'filename == "{filename}"'
-        try:
-            milvus_store.delete(delete_expr)
-        except Exception:
-            pass
-        try:
-            parent_chunk_store.delete_by_filename(filename)
-        except Exception:
-            pass
+        if MILVUS_SOFT_DELETE_ENABLED:
+            previous = document_registry.find_active_by_filename(filename)
+            if previous and previous["document_id"] != document_id:
+                soft_delete_document(
+                    previous["document_id"],
+                    registry=document_registry,
+                    milvus_store=milvus_store,
+                    parent_store=parent_chunk_store,
+                )
+        else:
+            delete_expr = f'filename == "{filename}"'
+            try:
+                milvus_store.delete(delete_expr)
+            except Exception:
+                pass
+            try:
+                parent_chunk_store.delete_by_filename(filename)
+            except Exception:
+                pass
         upload_job_manager.complete_step(job_id, "cleanup", "旧版本清理完成")
 
         failed_step = "parse"
         upload_job_manager.update_step(job_id, "parse", 5, "running", "正在解析文档并执行三级分块")
-        new_docs = loader.load_document(file_path, filename)
+        new_docs = loader.load_document(
+            file_path,
+            filename,
+            document_id=document_id or "",
+            is_deleted=False,
+        )
         if not new_docs:
             raise ValueError("文档处理失败，未能提取内容")
 
@@ -276,22 +299,63 @@ def _process_upload_job(job_id: str, file_path: str, filename: str) -> None:
             )
 
         milvus_writer.write_documents(leaf_docs, progress_callback=_on_vector_progress)
+        if MILVUS_SOFT_DELETE_ENABLED and document_id:
+            document_registry.upsert(
+                document_id=document_id,
+                filename=filename,
+                file_path=file_path,
+                file_type=str(leaf_docs[0].get("file_type", "")),
+                status=ACTIVE,
+                leaf_chunk_count=len(leaf_docs),
+                parent_chunk_count=len(parent_docs),
+            )
         upload_job_manager.complete_step(job_id, "vector_store", f"向量化入库完成：{total_leaf} 个叶子分块")
         upload_job_manager.complete_job(job_id, f"成功上传并处理 {filename}")
     except Exception as e:
+        if MILVUS_SOFT_DELETE_ENABLED and document_id:
+            try:
+                document_registry.set_status(document_id, FAILED, error_message=str(e))
+            except Exception:
+                pass
         upload_job_manager.fail_job(job_id, failed_step, str(e))
 
 
-def _process_delete_job(job_id: str, filename: str) -> None:
-    """后台执行文档删除，并把每个删除阶段同步给前端行内进度卡片。"""
+def _process_delete_job(job_id: str, filename: str, document_id: str | None = None) -> None:
+    """Soft-delete v2 documents; keep the legacy physical-delete path for v1."""
     failed_step = "prepare"
     try:
-        failed_step = "prepare"
-        delete_job_manager.update_step(job_id, "prepare", 20, "running", "正在初始化 Milvus 集合")
+        delete_job_manager.update_step(job_id, "prepare", 20, "running", "正在初始化删除任务")
         milvus_store.init_collection()
+
+        if MILVUS_SOFT_DELETE_ENABLED:
+            document = document_registry.get(document_id or "")
+            if not document:
+                document = document_registry.find_active_by_filename(filename)
+            if not document:
+                raise KeyError(f"未找到活动文档: {filename}")
+            document_id = document["document_id"]
+            delete_job_manager.complete_step(job_id, "prepare", "软删除任务已创建")
+
+            failed_step = "milvus"
+            delete_job_manager.update_step(job_id, "milvus", 30, "running", "正在标记向量为已删除")
+            result = soft_delete_document(
+                document_id,
+                registry=document_registry,
+                milvus_store=milvus_store,
+                parent_store=parent_chunk_store,
+            )
+            vector_count = int(result.get("vector_count", 0))
+            parent_count = int(result.get("parent_count", 0))
+            delete_job_manager.complete_step(job_id, "milvus", f"向量已软删除：{vector_count} 条")
+
+            failed_step = "parent_store"
+            delete_job_manager.update_step(job_id, "parent_store", 100, "running", "正在确认父级分块状态")
+            delete_job_manager.complete_step(job_id, "parent_store", f"父级分块已软删除：{parent_count} 条")
+            delete_job_manager.complete_job(job_id, f"已软删除 {filename}，向量 {vector_count} 条")
+            return
+
         delete_expr = f'filename == "{filename}"'
         delete_job_manager.complete_step(job_id, "prepare", "删除任务已创建")
-
         failed_step = "milvus"
         delete_job_manager.update_step(job_id, "milvus", 30, "running", "正在删除 Milvus 向量数据")
         result = milvus_store.delete(delete_expr)
@@ -302,8 +366,6 @@ def _process_delete_job(job_id: str, filename: str) -> None:
         delete_job_manager.update_step(job_id, "parent_store", 30, "running", "正在删除 PostgreSQL 父级分块")
         parent_chunk_store.delete_by_filename(filename)
         delete_job_manager.complete_step(job_id, "parent_store", "父级分块已删除")
-
-        # 完成摘要会由前端保留 3 秒，再自动从文档列表移除。
         delete_job_manager.complete_job(job_id, f"已删除 {filename}，向量数据 {deleted_count} 条")
     except Exception as e:
         delete_job_manager.fail_job(job_id, failed_step, str(e))
@@ -311,15 +373,24 @@ def _process_delete_job(job_id: str, filename: str) -> None:
 
 @router.get("/documents", response_model=DocumentListResponse)
 async def list_documents(_: User = Depends(require_admin)):
-    """获取已上传的文档列表（管理员）"""
+    """List active documents from PostgreSQL in v2, or all Milvus rows in legacy mode."""
     try:
+        if MILVUS_SOFT_DELETE_ENABLED:
+            documents = [
+                DocumentInfo(
+                    document_id=item["document_id"],
+                    filename=item["filename"],
+                    file_type=item["file_type"],
+                    chunk_count=item["leaf_chunk_count"],
+                    status=item["status"],
+                    uploaded_at=item["created_at"].isoformat(),
+                )
+                for item in document_registry.list_active()
+            ]
+            return DocumentListResponse(documents=documents)
+
         milvus_store.init_collection()
-
-        results = milvus_store.query(
-            output_fields=["filename", "file_type"],
-            limit=10000,
-        )
-
+        results = milvus_store.query_all(output_fields=["filename", "file_type"])
         file_stats = {}
         for item in results:
             filename = item.get("filename", "")
@@ -331,9 +402,7 @@ async def list_documents(_: User = Depends(require_admin)):
                     "chunk_count": 0,
                 }
             file_stats[filename]["chunk_count"] += 1
-
-        documents = [DocumentInfo(**stats) for stats in file_stats.values()]
-        return DocumentListResponse(documents=documents)
+        return DocumentListResponse(documents=[DocumentInfo(**stats) for stats in file_stats.values()])
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取文档列表失败: {str(e)}")
 
@@ -354,20 +423,35 @@ async def upload_document_async(
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     job = upload_job_manager.create_job(filename)
     file_path = UPLOAD_DIR / filename
+    document_id = None
+    if MILVUS_SOFT_DELETE_ENABLED:
+        document_id = document_registry.create(
+            filename=filename,
+            file_path=str(file_path),
+        )
 
     try:
         upload_job_manager.update_step(job["job_id"], "upload", 1, "running", "正在保存文件到服务器")
         await _save_upload_file(file, file_path)
         upload_job_manager.complete_step(job["job_id"], "upload", "文件已上传，等待后台处理")
     except Exception as e:
+        if document_id:
+            document_registry.set_status(document_id, FAILED, error_message=str(e))
         upload_job_manager.fail_job(job["job_id"], "upload", f"文件保存失败: {e}")
         raise HTTPException(status_code=500, detail=f"文件保存失败: {e}")
 
-    background_tasks.add_task(_process_upload_job, job["job_id"], str(file_path), filename)
+    background_tasks.add_task(
+        _process_upload_job,
+        job["job_id"],
+        str(file_path),
+        filename,
+        document_id,
+    )
     return DocumentUploadStartResponse(
         job_id=job["job_id"],
         filename=filename,
         message="文件已上传，正在后台解析和向量化入库",
+        document_id=document_id,
     )
 
 
@@ -393,6 +477,13 @@ async def delete_document_async(
     _: User = Depends(require_admin),
 ):
     """轻量版异步删除：立即返回 job_id，实际删除在后台执行。"""
+    document_id = None
+    if MILVUS_SOFT_DELETE_ENABLED:
+        document = document_registry.find_active_by_filename(filename)
+        if not document:
+            raise HTTPException(status_code=404, detail=f"未找到活动文档: {filename}")
+        document_id = document["document_id"]
+
     job = delete_job_manager.create_job(
         filename,
         steps=DELETE_STEPS,
@@ -401,7 +492,7 @@ async def delete_document_async(
         completion_step="parent_store",
     )
     delete_job_manager.update_step(job["job_id"], "prepare", 1, "running", "删除任务已提交")
-    background_tasks.add_task(_process_delete_job, job["job_id"], filename)
+    background_tasks.add_task(_process_delete_job, job["job_id"], filename, document_id)
     return DocumentDeleteStartResponse(
         job_id=job["job_id"],
         filename=filename,
@@ -419,7 +510,9 @@ async def get_delete_job(job_id: str, _: User = Depends(require_admin)):
 
 @router.post("/documents/upload", response_model=DocumentUploadResponse)
 async def upload_document(file: UploadFile = File(...), _: User = Depends(require_admin)):
-    """上传文档并进行 embedding（管理员）"""
+    """Legacy synchronous upload endpoint."""
+    if MILVUS_SOFT_DELETE_ENABLED:
+        raise HTTPException(status_code=409, detail="软删除模式请使用 /documents/upload/async")
     try:
         filename = file.filename or ""
         if not filename:
@@ -481,6 +574,22 @@ async def delete_document(filename: str, _: User = Depends(require_admin)):
     try:
         milvus_store.init_collection()
 
+        if MILVUS_SOFT_DELETE_ENABLED:
+            document = document_registry.find_active_by_filename(filename)
+            if not document:
+                raise HTTPException(status_code=404, detail=f"未找到活动文档: {filename}")
+            result = soft_delete_document(
+                document["document_id"],
+                registry=document_registry,
+                milvus_store=milvus_store,
+                parent_store=parent_chunk_store,
+            )
+            return DocumentDeleteResponse(
+                filename=filename,
+                chunks_deleted=int(result.get("vector_count", 0)),
+                message=f"成功软删除文档 {filename}",
+            )
+
         delete_expr = f'filename == "{filename}"'
         result = milvus_store.delete(delete_expr)
         parent_chunk_store.delete_by_filename(filename)
@@ -490,5 +599,7 @@ async def delete_document(filename: str, _: User = Depends(require_admin)):
             chunks_deleted=result.get("delete_count", 0) if isinstance(result, dict) else 0,
             message=f"成功删除文档 {filename} 的向量数据（本地文件已保留）",
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"删除文档失败: {str(e)}")

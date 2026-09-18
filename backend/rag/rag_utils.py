@@ -22,6 +22,7 @@ AUTO_MERGE_ENABLED = os.getenv("AUTO_MERGE_ENABLED", "true").lower() != "false"
 AUTO_MERGE_THRESHOLD = int(os.getenv("AUTO_MERGE_THRESHOLD", "2"))
 LEAF_RETRIEVE_LEVEL = int(os.getenv("LEAF_RETRIEVE_LEVEL", "3"))
 RETRIEVAL_TOP_K = int(os.getenv("RETRIEVAL_TOP_K", "5"))
+MILVUS_SOFT_DELETE_ENABLED = os.getenv("MILVUS_SOFT_DELETE_ENABLED", "false").lower() == "true"
 # Milvus 叶子层召回候选数；0 表示按 top_k * 3 自动推导
 RETRIEVAL_CANDIDATE_K = int(os.getenv("RETRIEVAL_CANDIDATE_K", "0"))
 
@@ -344,7 +345,10 @@ def retrieve_documents(query: str, top_k: int = RETRIEVAL_TOP_K) -> Dict[str, An
     query = sanitize_text(query)
     # Milvus 叶子层召回候选数：显式配置优先，未配置则按 top_k * 3 自动推导；始终不小于 top_k
     candidate_k = max(RETRIEVAL_CANDIDATE_K if RETRIEVAL_CANDIDATE_K > 0 else top_k * 3, top_k)
-    filter_expr = f"chunk_level == {LEAF_RETRIEVE_LEVEL}"
+    filters = [f"chunk_level == {LEAF_RETRIEVE_LEVEL}"]
+    if MILVUS_SOFT_DELETE_ENABLED:
+        filters.append("is_deleted == false")
+    filter_expr = " and ".join(filters)
     try:
         dense_embeddings = _embedding_service.get_embeddings([query])
         dense_embedding = dense_embeddings[0]

@@ -1,5 +1,3 @@
-version: '3.5'
-
 services:
   postgres:
     container_name: chatcat-postgres
@@ -51,7 +49,7 @@ services:
 
   minio:
     container_name: chatcat-milvus-minio
-    image: minio/minio:RELEASE.2024-05-28T17-19-04Z
+    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
     environment:
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
@@ -69,13 +67,14 @@ services:
 
   standalone:
     container_name: chatcat-milvus-standalone
-    image: milvusdb/milvus:v2.5.14
+    image: milvusdb/milvus:v2.6.23
     command: ["milvus", "run", "standalone"]
     security_opt:
       - seccomp:unconfined
     environment:
       MINIO_REGION: us-east-1
       ETCD_ENDPOINTS: etcd:2379
+      MQ_TYPE: rocksmq
       MINIO_ADDRESS: minio:9000
     volumes:
       - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/milvus:/var/lib/milvus

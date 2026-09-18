@@ -1,7 +1,10 @@
 export interface DocumentItem {
+  document_id?: string;
   filename: string;
   file_type: string;
   chunk_count: number;
+  status?: string;
+  uploaded_at?: string;
 }
 
 export interface UploadStep {

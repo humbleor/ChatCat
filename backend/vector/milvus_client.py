@@ -42,7 +42,8 @@ class MilvusSettings:
 
 
 def _normalize_filter(filter_expr: str) -> str:
-    return filter_expr.strip() if filter_expr.strip() else "id >= 0"
+    # filename exists in both the legacy collection and the v2 schema.
+    return filter_expr.strip() if filter_expr.strip() else 'filename != ""'
 
 
 def _ensure_no_proxy_localhost() -> None:
@@ -128,8 +129,8 @@ class MilvusStore:
         if client.has_collection(collection_name):
             return
 
-        schema = client.create_schema(auto_id=True, enable_dynamic_field=True)
-        schema.add_field("id", DataType.INT64, is_primary=True, auto_id=True)
+        schema = client.create_schema(auto_id=False, enable_dynamic_field=True)
+        schema.add_field("chunk_uid", DataType.VARCHAR, max_length=128, is_primary=True, auto_id=False)
         schema.add_field("dense_embedding", DataType.FLOAT_VECTOR, dim=dense_dim)
         schema.add_field("sparse_embedding", DataType.SPARSE_FLOAT_VECTOR)
         schema.add_field(
@@ -140,6 +141,9 @@ class MilvusStore:
             analyzer_params={"type": "chinese"},
             enable_match=True,
         )
+        schema.add_field("document_id", DataType.VARCHAR, max_length=64)
+        schema.add_field("is_deleted", DataType.BOOL, default_value=False)
+        schema.add_field("deleted_at", DataType.INT64, default_value=0)
         schema.add_field("filename", DataType.VARCHAR, max_length=255)
         schema.add_field("file_type", DataType.VARCHAR, max_length=50)
         schema.add_field("file_path", DataType.VARCHAR, max_length=1024)
@@ -226,6 +230,7 @@ class MilvusStore:
                     output_fields=fields,
                     limit=QUERY_MAX_LIMIT,
                     offset=offset,
+                    consistency_level="Strong",
                 )
                 if not batch:
                     break
@@ -268,6 +273,9 @@ class MilvusStore:
     ) -> list[dict]:
         output_fields = [
             "text",
+            "chunk_uid",
+            "document_id",
+            "is_deleted",
             "filename",
             "file_type",
             "page_number",
@@ -311,6 +319,9 @@ class MilvusStore:
                     {
                         "id": hit.get("id"),
                         "text": hit.get("text", ""),
+                        "chunk_uid": hit.get("chunk_uid", hit.get("id", "")),
+                        "document_id": hit.get("document_id", ""),
+                        "is_deleted": hit.get("is_deleted", False),
                         "filename": hit.get("filename", ""),
                         "file_type": hit.get("file_type", ""),
                         "page_number": hit.get("page_number", 0),
@@ -339,6 +350,9 @@ class MilvusStore:
                 limit=top_k,
                 output_fields=[
                     "text",
+                    "chunk_uid",
+                    "document_id",
+                    "is_deleted",
                     "filename",
                     "file_type",
                     "page_number",
@@ -359,6 +373,9 @@ class MilvusStore:
                     {
                         "id": hit.get("id"),
                         "text": hit.get("entity", {}).get("text", ""),
+                        "chunk_uid": hit.get("entity", {}).get("chunk_uid", hit.get("id", "")),
+                        "document_id": hit.get("entity", {}).get("document_id", ""),
+                        "is_deleted": hit.get("entity", {}).get("is_deleted", False),
                         "filename": hit.get("entity", {}).get("filename", ""),
                         "file_type": hit.get("entity", {}).get("file_type", ""),
                         "page_number": hit.get("entity", {}).get("page_number", 0),
@@ -393,6 +410,9 @@ class MilvusStore:
                 limit=top_k,
                 output_fields=[
                     "text",
+                    "chunk_uid",
+                    "document_id",
+                    "is_deleted",
                     "filename",
                     "file_type",
                     "page_number",
@@ -413,6 +433,9 @@ class MilvusStore:
                     {
                         "id": hit.get("id"),
                         "text": hit.get("entity", {}).get("text", ""),
+                        "chunk_uid": hit.get("entity", {}).get("chunk_uid", hit.get("id", "")),
+                        "document_id": hit.get("entity", {}).get("document_id", ""),
+                        "is_deleted": hit.get("entity", {}).get("is_deleted", False),
                         "filename": hit.get("entity", {}).get("filename", ""),
                         "file_type": hit.get("entity", {}).get("file_type", ""),
                         "page_number": hit.get("entity", {}).get("page_number", 0),
@@ -425,6 +448,55 @@ class MilvusStore:
                     }
                 )
         return formatted_results
+
+    def count(self, filter_expr: str = "") -> int:
+        expr = _normalize_filter(filter_expr)
+
+        def _count(client: MilvusClient) -> int:
+            rows = client.query(
+                collection_name=self.collection_name,
+                filter=expr,
+                output_fields=["count(*)"],
+                consistency_level="Strong",
+            )
+            return int(rows[0].get("count(*)", 0)) if rows else 0
+
+        return self._run(_count)
+
+    def set_document_deleted(
+        self,
+        document_id: str,
+        *,
+        is_deleted: bool,
+        deleted_at: int = 0,
+        batch_size: int = 500,
+    ) -> int:
+        if not document_id:
+            return 0
+        expr = f'document_id == "{document_id}"'
+        rows = self.query_all(filter_expr=expr, output_fields=["chunk_uid"])
+        chunk_uids = [str(row.get("chunk_uid") or "") for row in rows if row.get("chunk_uid")]
+        if not chunk_uids:
+            return 0
+
+        for start in range(0, len(chunk_uids), batch_size):
+            batch = chunk_uids[start : start + batch_size]
+            updates = [
+                {
+                    "chunk_uid": chunk_uid,
+                    "is_deleted": is_deleted,
+                    "deleted_at": deleted_at if is_deleted else 0,
+                }
+                for chunk_uid in batch
+            ]
+            self._run(
+                lambda client, data=updates: client.upsert(
+                    collection_name=self.collection_name,
+                    data=data,
+                    partial_update=True,
+                )
+            )
+        return len(chunk_uids)
 
     def delete(self, filter_expr: str):
         return self._run(lambda client: client.delete(collection_name=self.collection_name, filter=filter_expr))

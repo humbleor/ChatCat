@@ -35,6 +35,10 @@ class MilvusWriter:
                 {
                     "dense_embedding": dense_emb,
                     "text": doc["text"],
+                    "chunk_uid": doc.get("chunk_uid") or doc["chunk_id"],
+                    "document_id": doc.get("document_id", ""),
+                    "is_deleted": bool(doc.get("is_deleted", False)),
+                    "deleted_at": int(doc.get("deleted_at", 0) or 0),
                     "filename": doc["filename"],
                     "file_type": doc["file_type"],
                     "file_path": doc.get("file_path", ""),

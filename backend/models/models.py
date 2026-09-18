@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.infra.database import Base
@@ -55,6 +55,7 @@ class ParentChunk(Base):
     __tablename__ = "parent_chunks"
 
     chunk_id: Mapped[str] = mapped_column(String(512), primary_key=True)
+    document_id: Mapped[str] = mapped_column(String(64), default="", nullable=False, index=True)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     filename: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     file_type: Mapped[str] = mapped_column(String(50), default="", nullable=False)
@@ -64,4 +65,23 @@ class ParentChunk(Base):
     root_chunk_id: Mapped[str] = mapped_column(String(512), default="", nullable=False)
     chunk_level: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     chunk_idx: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class KnowledgeDocument(Base):
+    __tablename__ = "knowledge_documents"
+
+    document_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    file_type: Mapped[str] = mapped_column(String(50), default="", nullable=False)
+    file_path: Mapped[str] = mapped_column(String(1024), default="", nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="ingesting", nullable=False, index=True)
+    leaf_chunk_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    parent_chunk_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    purged_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

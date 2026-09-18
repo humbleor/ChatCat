@@ -118,9 +118,11 @@ class SessionDeleteResponse(BaseModel):
 
 
 class DocumentInfo(BaseModel):
+    document_id: Optional[str] = None
     filename: str
     file_type: str
     chunk_count: int
+    status: Optional[str] = None
     uploaded_at: Optional[str] = None
 
 
@@ -138,6 +140,7 @@ class DocumentUploadStartResponse(BaseModel):
     job_id: str
     filename: str
     message: str
+    document_id: Optional[str] = None
 
 
 class UploadStepInfo(BaseModel):
