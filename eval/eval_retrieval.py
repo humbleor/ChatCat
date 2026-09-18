@@ -1,286 +1,454 @@
-"""端到端检索质量评测：直接调后端 retrieve_documents() 跑真实 RAG 检索链路。
+"""用版本化 JSONL 数据集评测 ChatCat 的真实检索链路，并支持 baseline 回归门禁。"""
 
-目标指标：
-  - Doc Hit@K / Chunk Hit@K / Doc MRR@K
-  - 检索延迟 P50/P95
-  - Reranker 启用/应用/失败率
-  - Auto-merging 替换次数与启用率
-
-运行前提：
-  1. docker compose up -d（Postgres / Redis / Milvus）
-  2. Milvus 集合里已上传过文档（有 level-3 叶子 chunk）
-  3. `eval/eval_embeding.py gen` 已生成 questions.json
-
-用法：
-  uv run python eval/eval_retrieval.py
-  uv run python eval/eval_retrieval.py --k 1 3 5 --top-k 8
-"""
+from __future__ import annotations
 
 import argparse
+import hashlib
 import json
-import os
 import statistics
 import sys
 import time
-from datetime import datetime
+from collections import Counter, defaultdict
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 from dotenv import load_dotenv
 
-# 项目根目录加入 sys.path
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 load_dotenv()
 
 EVAL_DIR = Path(__file__).resolve().parent
-QUESTIONS_FILE = EVAL_DIR / "data" / "questions.json"
+DEFAULT_DATASET = EVAL_DIR / "rag_v1.jsonl"
+DEFAULT_BASELINE = EVAL_DIR / "baselines" / "rag_v1-retrieval.json"
 RESULTS_DIR = EVAL_DIR / "results"
 
 
-def _first_rank(hits: list[dict], field: str, target: str) -> int | None:
-    if not target:
-        return None
-    for i, hit in enumerate(hits, 1):
-        if str(hit.get(field, "")) == target:
-            return i
-    return None
+def load_dataset(path: Path) -> tuple[list[dict], str]:
+    raw = path.read_bytes()
+    rows = [json.loads(line) for line in raw.decode("utf-8").splitlines() if line.strip()]
+    if not rows:
+        raise ValueError(f"数据集为空: {path}")
+    required = {"id", "question", "gold_answer", "gold_chunks", "tags"}
+    seen: set[str] = set()
+    for line_no, row in enumerate(rows, 1):
+        missing = required - row.keys()
+        if missing:
+            raise ValueError(f"{path}:{line_no} 缺少字段: {sorted(missing)}")
+        if row["id"] in seen:
+            raise ValueError(f"{path}:{line_no} 重复 id: {row['id']}")
+        if not row["gold_chunks"]:
+            raise ValueError(f"{path}:{line_no} gold_chunks 不能为空")
+        seen.add(row["id"])
+    return rows, hashlib.sha256(raw).hexdigest()
 
 
 def _percentile(values: list[float], pct: float) -> float | None:
     if not values:
         return None
-    sorted_vals = sorted(values)
-    k = (len(sorted_vals) - 1) * pct
-    f = int(k)
-    c = min(f + 1, len(sorted_vals) - 1)
-    if f == c:
-        return sorted_vals[f]
-    return sorted_vals[f] + (sorted_vals[c] - sorted_vals[f]) * (k - f)
+    ordered = sorted(values)
+    pos = (len(ordered) - 1) * pct
+    low = int(pos)
+    high = min(low + 1, len(ordered) - 1)
+    return ordered[low] + (ordered[high] - ordered[low]) * (pos - low)
 
 
-def _print_report(summary: dict) -> None:
+def _document_id(chunk_id: str | None) -> str:
+    return str(chunk_id or "").split("::", 1)[0]
+
+
+def _first_rank(values: list[str], targets: set[str]) -> int | None:
+    return next((index for index, value in enumerate(values, 1) if value in targets), None)
+
+
+def _load_gold_families(rows: list[dict]) -> dict[str, dict[str, str]]:
+    """读取当前 Milvus 元数据，用 parent/root 关系容忍 auto-merging 返回父块。"""
+    from backend.vector.milvus_client import get_milvus_store
+
+    wanted = {chunk_id for row in rows for chunk_id in row["gold_chunks"]}
+    records = get_milvus_store().query_all(
+        filter_expr="chunk_level == 3",
+        output_fields=["chunk_id", "parent_chunk_id", "root_chunk_id"],
+    )
+    found = {
+        record["chunk_id"]: {
+            "parent_chunk_id": str(record.get("parent_chunk_id") or ""),
+            "root_chunk_id": str(record.get("root_chunk_id") or ""),
+        }
+        for record in records
+        if record.get("chunk_id") in wanted
+    }
+    missing = sorted(wanted - found.keys())
+    if missing:
+        preview = "\n".join(missing[:10])
+        raise ValueError(f"{len(missing)} 个 gold chunk 不在当前 Milvus 中:\n{preview}")
+    return found
+
+
+def _evidence_targets(gold_chunks: list[str], families: dict[str, dict[str, str]]) -> set[str]:
+    targets = set(gold_chunks)
+    for chunk_id in gold_chunks:
+        targets.update(value for value in families[chunk_id].values() if value)
+    return targets
+
+
+def _metric_at(summary: dict, name: str, k: int) -> float | None:
+    value = summary.get(name, {}).get(str(k))
+    return float(value) if value is not None else None
+
+
+def compare_baseline(
+    summary: dict,
+    baseline: dict,
+    *,
+    max_hit_regression: float,
+    max_failure_increase: float,
+    max_latency_increase: float,
+) -> list[dict]:
+    old = baseline["summary"]
+    checks: list[dict] = []
+    for name in ("document_hit", "evidence_hit"):
+        for k in summary["ks"]:
+            current = _metric_at(summary, name, k)
+            previous = _metric_at(old, name, k)
+            if current is None or previous is None:
+                continue
+            minimum = max(0.0, previous - max_hit_regression)
+            checks.append(
+                {
+                    "metric": f"{name}@{k}",
+                    "baseline": previous,
+                    "current": current,
+                    "threshold": minimum,
+                    "passed": current >= minimum,
+                }
+            )
+
+    current_failure = float(summary["failure_rate"])
+    old_failure = float(old["failure_rate"])
+    checks.append(
+        {
+            "metric": "failure_rate",
+            "baseline": old_failure,
+            "current": current_failure,
+            "threshold": old_failure + max_failure_increase,
+            "passed": current_failure <= old_failure + max_failure_increase,
+        }
+    )
+    current_rerank_failure = float(summary["rerank"]["failure_rate"])
+    old_rerank_failure = float(old["rerank"].get("failure_rate", 0.0))
+    checks.append(
+        {
+            "metric": "rerank_failure_rate",
+            "baseline": old_rerank_failure,
+            "current": current_rerank_failure,
+            "threshold": old_rerank_failure + max_failure_increase,
+            "passed": current_rerank_failure <= old_rerank_failure + max_failure_increase,
+        }
+    )
+    current_p95 = summary["latency_ms"]["p95"]
+    old_p95 = old["latency_ms"]["p95"]
+    if current_p95 is not None and old_p95 is not None:
+        checks.append(
+            {
+                "metric": "latency_p95_ms",
+                "baseline": old_p95,
+                "current": current_p95,
+                "threshold": old_p95 * (1 + max_latency_increase),
+                "passed": current_p95 <= old_p95 * (1 + max_latency_increase),
+            }
+        )
+    return checks
+
+
+def _print_report(summary: dict, gates: list[dict] | None = None) -> None:
     from rich.console import Console
     from rich.table import Table
 
     console = Console()
     console.print(
-        f"\n检索质量评测  |  样本: {summary['sample_count']}  检索失败: {summary['failed']}  "
-        f"空结果: {summary['empty_hits']}\n"
+        f"\n检索质量评测 | 样本 {summary['sample_count']} | 失败 {summary['failed']} | 空结果 {summary['empty_hits']}\n"
     )
-
-    ks = summary["ks"]
     table = Table(title="召回指标")
     table.add_column("指标")
-    for k in ks:
+    for k in summary["ks"]:
         table.add_column(f"@{k}")
-    for k in ks:
-        table.add_column(f"@{k}")
-    for k in ks:
-        table.add_column(f"@{k}")
-
-    def _row(name: str, src: dict) -> list:
-        return [name] + [f"{src[k]:.3f}" for k in ks]
-
-    table.add_row(*_row("Doc Hit", summary["doc_hit"]))
-    table.add_row(*_row("Root-Chunk Hit", summary["root_chunk_hit"]))
-    table.add_row(*_row("Chunk Hit", summary["chunk_hit"]))
-    table.add_row(*_row("Doc MRR", summary["doc_mrr"]))
+    for label, key in (
+        ("Document Hit", "document_hit"),
+        ("Evidence Hit", "evidence_hit"),
+        ("Evidence Coverage", "evidence_coverage"),
+        ("Document MRR", "document_mrr"),
+    ):
+        table.add_row(label, *[f"{summary[key][str(k)]:.3f}" for k in summary["ks"]])
     console.print(table)
 
-    perf = Table(title="性能与开关")
+    perf = Table(title="性能与运行状态")
     perf.add_column("指标")
     perf.add_column("值")
-    p50 = summary["latency_ms"]["p50"]
-    p95 = summary["latency_ms"]["p95"]
-    mean = summary["latency_ms"]["mean"]
-    perf.add_row("检索 P50 (ms)", f"{p50:.1f}" if p50 is not None else "-")
-    perf.add_row("检索 P95 (ms)", f"{p95:.1f}" if p95 is not None else "-")
-    perf.add_row("检索均值 (ms)", f"{mean:.1f}" if mean is not None else "-")
-    perf.add_row("Rerank 应用率", f"{summary['rerank']['applied_rate']:.3f}（{summary['rerank']['applied']}/{summary['rerank']['seen']}）")
-    perf.add_row("Rerank 失败次数", f"{summary['rerank']['failed']}")
-    perf.add_row("Auto-merge 替换总块数", f"{summary['auto_merge']['replaced_total']}")
-    perf.add_row("Auto-merge 实际启用率", f"{summary['auto_merge']['applied_rate']:.3f}（{summary['auto_merge']['applied']}/{summary['auto_merge']['seen']}）")
-    perf.add_row(
-        "检索模式 (hybrid/dense_fallback/failed)",
-        f"{summary['retrieval_mode']['hybrid']} / {summary['retrieval_mode']['dense_fallback']} / {summary['retrieval_mode']['failed']}",
-    )
+    for key in ("mean", "p50", "p95"):
+        value = summary["latency_ms"][key]
+        perf.add_row(f"延迟 {key}", f"{value:.1f} ms" if value is not None else "-")
+    perf.add_row("失败率", f"{summary['failure_rate']:.3f}")
+    perf.add_row("Rerank 失败", str(summary["rerank"]["failed"]))
+    perf.add_row("Dense fallback", str(summary["retrieval_mode"]["dense_fallback"]))
     console.print(perf)
 
+    if gates is not None:
+        gate_table = Table(title="Baseline Gate")
+        for column in ("状态", "指标", "当前", "门槛", "Baseline"):
+            gate_table.add_column(column)
+        for gate in gates:
+            gate_table.add_row(
+                "PASS" if gate["passed"] else "FAIL",
+                gate["metric"],
+                f"{gate['current']:.4f}",
+                f"{gate['threshold']:.4f}",
+                f"{gate['baseline']:.4f}",
+            )
+        console.print(gate_table)
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="端到端检索质量评测（接真实 RAG 检索链路）")
-    parser.add_argument("--k", nargs="+", type=int, default=[1, 3, 5], help="Hit@K / MRR@K 的 K 值")
-    parser.add_argument("--top-k", type=int, default=5, help="retrieve_documents 的 top_k")
-    parser.add_argument("--limit", type=int, default=0, help="只评测前 N 条样本（0 表示全部）")
-    parser.add_argument("--retries", type=int, default=1, help="单条样本失败重试次数")
-    parser.add_argument("--warmup", type=int, default=3, help="不计入指标的预热查询数（0 关闭）")
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="使用 rag_v1.jsonl 评测真实 RAG 检索链路")
+    parser.add_argument("--dataset", type=Path, default=DEFAULT_DATASET)
+    parser.add_argument("--baseline", type=Path, default=DEFAULT_BASELINE)
+    parser.add_argument("--update-baseline", action="store_true")
+    parser.add_argument("--allow-degraded-baseline", action="store_true")
+    parser.add_argument("--no-gate", action="store_true")
+    parser.add_argument("--k", nargs="+", type=int, default=[1, 3, 5, 8])
+    parser.add_argument("--top-k", type=int, default=8)
+    parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--retries", type=int, default=1)
+    parser.add_argument("--warmup", type=int, default=1)
+    parser.add_argument("--max-hit-regression", type=float, default=0.03)
+    parser.add_argument("--max-failure-increase", type=float, default=0.0)
+    parser.add_argument("--max-latency-increase", type=float, default=0.25)
     args = parser.parse_args()
 
-    if not QUESTIONS_FILE.exists():
-        sys.exit(f"未找到 {QUESTIONS_FILE}，请先运行: uv run python eval/eval_embeding.py gen")
+    rows, dataset_sha256 = load_dataset(args.dataset)
+    if args.limit:
+        rows = rows[: args.limit]
+    families = _load_gold_families(rows)
 
-    questions = json.loads(QUESTIONS_FILE.read_text(encoding="utf-8"))
-    if args.limit > 0:
-        questions = questions[: args.limit]
+    from backend.rag.rag_utils import retrieve_documents
 
-    from backend.rag.rag_utils import retrieve_documents  # noqa: E402
-
-    if args.warmup > 0:
-        print(f"预热：跑 {args.warmup} 条不计分（让 BGE-M3 / Rerank 端完成首次加载）...")
-        for j in range(args.warmup):
-            try:
-                retrieve_documents(f"warmup query {j}", top_k=args.top_k)
-            except Exception as e:
-                print(f"  预热 {j + 1} 失败（忽略）: {e}")
-        print("预热完成。\n")
+    for index in range(args.warmup):
+        try:
+            retrieve_documents(f"warmup query {index}", top_k=args.top_k)
+        except Exception as exc:
+            print(f"预热失败（忽略）: {exc}")
 
     ks = sorted(set(args.k))
-    agg = {k: {"doc_hit": 0, "doc_mrr": 0.0, "chunk_hit": 0, "root_chunk_hit": 0} for k in ks}
+    counters = {k: {"document_hit": 0, "evidence_hit": 0, "evidence_coverage": 0.0, "document_mrr": 0.0} for k in ks}
     failed = 0
     empty_hits = 0
     latencies: list[float] = []
-    rerank_applied = 0
-    rerank_failed = 0
-    rerank_seen = 0
-    auto_merge_replaced = 0
-    auto_merge_applied = 0
-    auto_merge_seen = 0
-    retrieval_mode_counts = {"hybrid": 0, "dense_fallback": 0, "failed": 0}
-    per_question: list[dict] = []
+    rerank = Counter(seen=0, applied=0, failed=0)
+    auto_merge = Counter(seen=0, applied=0, replaced_total=0)
+    modes = Counter(hybrid=0, dense_fallback=0, failed=0)
+    by_tag: dict[str, Counter] = defaultdict(Counter)
+    details: list[dict[str, Any]] = []
 
-    print(f"开始评测：{len(questions)} 条样本，top_k={args.top_k}，ks={ks}")
-    for i, item in enumerate(questions, 1):
-        q = item["question"]
-        gt_doc = item.get("filename", "")
-        gt_chunk = item.get("chunk_id", "")
-        gt_root = item.get("root_chunk_id", "")
-        last_err = None
-        hits: list[dict] = []
-        meta: dict = {}
-        for attempt in range(args.retries + 1):
-            t0 = time.perf_counter()
+    print(f"开始评测 {len(rows)} 条样本，dataset_sha256={dataset_sha256[:12]}...")
+    for index, row in enumerate(rows, 1):
+        last_error = ""
+        result: dict = {}
+        started = time.perf_counter()
+        for _attempt in range(args.retries + 1):
             try:
-                result = retrieve_documents(q, top_k=args.top_k)
-                elapsed_ms = (time.perf_counter() - t0) * 1000
-                hits = result.get("docs", []) if isinstance(result, dict) else []
-                meta = result.get("meta", {}) if isinstance(result, dict) else {}
+                result = retrieve_documents(row["question"], top_k=args.top_k)
+                last_error = ""
                 break
-            except Exception as e:
-                last_err = str(e)
-                elapsed_ms = 0.0
-        else:
+            except Exception as exc:
+                last_error = str(exc)
+        elapsed_ms = (time.perf_counter() - started) * 1000
+
+        if last_error:
             failed += 1
-            print(f"[{i}/{len(questions)}] 检索失败 {args.retries + 1} 次，跳过: {last_err}")
-            per_question.append({"question": q, "gt_doc": gt_doc, "gt_chunk": gt_chunk, "error": last_err})
+            details.append(
+                {
+                    "id": row["id"],
+                    "question": row["question"],
+                    "tags": row["tags"],
+                    "status": "failed",
+                    "failure_stage": "retrieval",
+                    "error": last_error,
+                    "latency_ms": round(elapsed_ms, 1),
+                }
+            )
             continue
 
-        if not hits:
+        docs = result.get("docs", [])
+        meta = result.get("meta", {})
+        if not docs:
             empty_hits += 1
         latencies.append(elapsed_ms)
 
-        doc_rank = _first_rank(hits, "filename", gt_doc)
-        chunk_rank = _first_rank(hits, "chunk_id", gt_chunk)
-        # 根块级命中：先按 root_chunk_id 精确匹配；缺失时退化为文档级（保留有效样本）
-        if gt_root:
-            root_rank = _first_rank(hits, "root_chunk_id", gt_root)
-            if root_rank is None and gt_doc:
-                root_rank = doc_rank  # 回退到 doc_rank，避免 gt_root 缺失把所有样本判为未命中
-        else:
-            root_rank = doc_rank
-        for k in ks:
-            if doc_rank is not None and doc_rank <= k:
-                agg[k]["doc_hit"] += 1
-                agg[k]["doc_mrr"] += 1.0 / doc_rank
-            if chunk_rank is not None and chunk_rank <= k:
-                agg[k]["chunk_hit"] += 1
-            if root_rank is not None and root_rank <= k:
-                agg[k]["root_chunk_hit"] += 1
-
-        if meta:
-            if meta.get("rerank_enabled"):
-                rerank_seen += 1
-                if meta.get("rerank_applied"):
-                    rerank_applied += 1
-                if meta.get("rerank_error"):
-                    rerank_failed += 1
-            if meta.get("auto_merge_enabled"):
-                auto_merge_seen += 1
-                if meta.get("auto_merge_applied"):
-                    auto_merge_applied += 1
-                auto_merge_replaced += int(meta.get("auto_merge_replaced_chunks", 0) or 0)
-            mode = meta.get("retrieval_mode")
-            if mode in retrieval_mode_counts:
-                retrieval_mode_counts[mode] += 1
-
-        per_question.append(
+        returned_ids = [str(doc.get("chunk_id") or "") for doc in docs]
+        returned_docs = [_document_id(chunk_id) for chunk_id in returned_ids]
+        gold_chunks = set(row["gold_chunks"])
+        gold_docs = {_document_id(chunk_id) for chunk_id in gold_chunks}
+        family_targets = _evidence_targets(row["gold_chunks"], families)
+        returned_families = [
             {
-                "question": q,
-                "gt_doc": gt_doc,
-                "gt_chunk": gt_chunk,
-                "gt_root_chunk_id": gt_root,
-                "latency_ms": round(elapsed_ms, 1),
-                "doc_rank": doc_rank,
-                "chunk_rank": chunk_rank,
-                "root_rank": root_rank,
-                "hit_count": len(hits),
-                "retrieval_mode": meta.get("retrieval_mode"),
-                "rerank_enabled": meta.get("rerank_enabled"),
-                "rerank_applied": meta.get("rerank_applied"),
-                "rerank_error": meta.get("rerank_error"),
-                "auto_merge_applied": meta.get("auto_merge_applied"),
-                "auto_merge_replaced_chunks": meta.get("auto_merge_replaced_chunks"),
+                str(doc.get("chunk_id") or ""),
+                str(doc.get("parent_chunk_id") or ""),
+                str(doc.get("root_chunk_id") or ""),
             }
+            for doc in docs
+        ]
+        document_rank = _first_rank(returned_docs, gold_docs)
+        evidence_rank = next(
+            (rank for rank, values in enumerate(returned_families, 1) if values & family_targets),
+            None,
         )
 
-        if i % 5 == 0 or i == len(questions):
-            print(f"  [{i}/{len(questions)}] 已完成")
+        per_k: dict[str, dict] = {}
+        for k in ks:
+            doc_hit = document_rank is not None and document_rank <= k
+            evidence_hit = evidence_rank is not None and evidence_rank <= k
+            covered = {
+                gold
+                for gold in gold_chunks
+                if any(
+                    {
+                        str(doc.get("chunk_id") or ""),
+                        str(doc.get("parent_chunk_id") or ""),
+                        str(doc.get("root_chunk_id") or ""),
+                    }
+                    & _evidence_targets([gold], families)
+                    for doc in docs[:k]
+                )
+            }
+            coverage = len(covered) / len(gold_chunks)
+            counters[k]["document_hit"] += int(doc_hit)
+            counters[k]["evidence_hit"] += int(evidence_hit)
+            counters[k]["evidence_coverage"] += coverage
+            if doc_hit:
+                counters[k]["document_mrr"] += 1 / document_rank
+            per_k[str(k)] = {
+                "document_hit": doc_hit,
+                "evidence_hit": evidence_hit,
+                "evidence_coverage": coverage,
+            }
+            for tag in row["tags"]:
+                by_tag[tag][f"count@{k}"] += 1
+                by_tag[tag][f"document_hit@{k}"] += int(doc_hit)
+                by_tag[tag][f"evidence_hit@{k}"] += int(evidence_hit)
 
-    n = len(per_question)
-    if n == 0:
-        sys.exit("没有任何样本产出结果")
+        if meta.get("rerank_enabled"):
+            rerank["seen"] += 1
+            rerank["applied"] += int(bool(meta.get("rerank_applied")))
+            rerank["failed"] += int(bool(meta.get("rerank_error")))
+        if meta.get("auto_merge_enabled"):
+            auto_merge["seen"] += 1
+            auto_merge["applied"] += int(bool(meta.get("auto_merge_applied")))
+            auto_merge["replaced_total"] += int(meta.get("auto_merge_replaced_chunks", 0) or 0)
+        modes[str(meta.get("retrieval_mode") or "unknown")] += 1
+        details.append(
+            {
+                "id": row["id"],
+                "question": row["question"],
+                "tags": row["tags"],
+                "status": "ok",
+                "latency_ms": round(elapsed_ms, 1),
+                "document_rank": document_rank,
+                "evidence_rank": evidence_rank,
+                "metrics": per_k,
+                "returned_chunk_ids": returned_ids,
+                "retrieval_meta": meta,
+            }
+        )
+        if index % 5 == 0 or index == len(rows):
+            print(f"  [{index}/{len(rows)}] 已完成")
 
+    total = len(rows)
     summary = {
-        "generated_at": datetime.now().isoformat(timespec="seconds"),
-        "sample_count": n,
+        "sample_count": total,
         "failed": failed,
+        "failure_rate": failed / total,
         "empty_hits": empty_hits,
         "ks": ks,
-        "doc_hit": {k: (agg[k]["doc_hit"] / n) for k in ks},
-        "doc_mrr": {k: (agg[k]["doc_mrr"] / n) for k in ks},
-        "chunk_hit": {k: (agg[k]["chunk_hit"] / n) for k in ks},
-        "root_chunk_hit": {k: (agg[k]["root_chunk_hit"] / n) for k in ks},
+        "document_hit": {str(k): counters[k]["document_hit"] / total for k in ks},
+        "evidence_hit": {str(k): counters[k]["evidence_hit"] / total for k in ks},
+        "evidence_coverage": {str(k): counters[k]["evidence_coverage"] / total for k in ks},
+        "document_mrr": {str(k): counters[k]["document_mrr"] / total for k in ks},
         "latency_ms": {
+            "mean": statistics.fmean(latencies) if latencies else None,
             "p50": _percentile(latencies, 0.50),
             "p95": _percentile(latencies, 0.95),
-            "mean": (sum(latencies) / len(latencies)) if latencies else None,
         },
         "rerank": {
-            "seen": rerank_seen,
-            "applied": rerank_applied,
-            "applied_rate": (rerank_applied / rerank_seen) if rerank_seen else 0.0,
-            "failed": rerank_failed,
+            **rerank,
+            "applied_rate": rerank["applied"] / rerank["seen"] if rerank["seen"] else 0.0,
         },
         "auto_merge": {
-            "seen": auto_merge_seen,
-            "applied": auto_merge_applied,
-            "applied_rate": (auto_merge_applied / auto_merge_seen) if auto_merge_seen else 0.0,
-            "replaced_total": auto_merge_replaced,
+            **auto_merge,
+            "applied_rate": auto_merge["applied"] / auto_merge["seen"] if auto_merge["seen"] else 0.0,
         },
-        "retrieval_mode": retrieval_mode_counts,
+        "retrieval_mode": dict(modes),
+        "by_tag": {
+            tag: {
+                key: (
+                    value / values[key.replace("document_hit", "count").replace("evidence_hit", "count")]
+                    if (
+                        "_hit@" in key and values[key.replace("document_hit", "count").replace("evidence_hit", "count")]
+                    )
+                    else value
+                )
+                for key, value in values.items()
+            }
+            for tag, values in by_tag.items()
+        },
+    }
+    report = {
+        "schema_version": 1,
+        "kind": "rag_retrieval_evaluation",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "dataset": str(args.dataset),
+        "dataset_sha256": dataset_sha256,
+        "config": {"top_k": args.top_k, "ks": ks, "retries": args.retries},
+        "summary": summary,
+        "cases": details,
     }
 
-    _print_report(summary)
+    gates: list[dict] | None = None
+    if args.update_baseline:
+        if args.limit:
+            raise ValueError("--update-baseline 不能与 --limit 一起使用")
+        if not args.allow_degraded_baseline and (failed or rerank["failed"]):
+            raise RuntimeError("存在 retrieval/rerank Provider 失败，拒绝更新 baseline")
+        args.baseline.parent.mkdir(parents=True, exist_ok=True)
+        args.baseline.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(f"Baseline 已更新: {args.baseline}")
+    elif args.baseline.exists() and not args.no_gate:
+        baseline = json.loads(args.baseline.read_text(encoding="utf-8"))
+        gates = compare_baseline(
+            summary,
+            baseline,
+            max_hit_regression=args.max_hit_regression,
+            max_failure_increase=args.max_failure_increase,
+            max_latency_increase=args.max_latency_increase,
+        )
+    elif not args.no_gate:
+        print(f"尚无 baseline：{args.baseline}；本次只生成结果，不执行 gate。")
 
+    _print_report(summary, gates)
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    path = RESULTS_DIR / f"retrieval-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
-    path.write_text(
-        json.dumps({"summary": summary, "per_question": per_question}, ensure_ascii=False, indent=2),
+    output = RESULTS_DIR / f"retrieval-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
+    output.write_text(
+        json.dumps({**report, "gates": gates}, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    print(f"结果已保存 -> {path}")
+    print(f"结果已保存: {output}")
+    if gates and any(not gate["passed"] for gate in gates):
+        print("Baseline gate 失败。")
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

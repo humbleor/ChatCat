@@ -32,6 +32,9 @@ load_dotenv()
 
 # 同步版完整 Agent 流程
 chat_with_agent = importlib.import_module("backend.agent.agent").chat_with_agent
+reserve_run = importlib.import_module("backend.agent.run_manager").reserve_run
+
+EVAL_USERNAME = "rag_eval"
 
 # 1. 数据集名（LangSmith 中已存在）
 DATASET_NAME = "RAG"
@@ -89,10 +92,18 @@ def target_function(inputs: dict) -> dict:
     question = inputs["question"]
     # 每条评估样本使用独立会话，避免上下文串扰
     session_id = f"langsmith_eval_{uuid4().hex}"
+    request_id = f"langsmith_{uuid4().hex}"
+    reservation = reserve_run(
+        username=EVAL_USERNAME,
+        session_id=session_id,
+        message=question,
+        request_id=request_id,
+    )
     result = chat_with_agent(
         user_text=question,
-        user_id="langsmith_eval_user",
+        user_id=EVAL_USERNAME,
         session_id=session_id,
+        run_id=reservation.run_id,
     )
 
     response_text = ""
@@ -107,6 +118,13 @@ def target_function(inputs: dict) -> dict:
 
 
 def main() -> None:
+    from backend.infra.checkpointer import init_checkpointer
+    from backend.infra.database import init_db
+    from eval.eval_answer import ensure_eval_user
+
+    init_db()
+    init_checkpointer()
+    ensure_eval_user(EVAL_USERNAME)
     # 更多说明：https://docs.langchain.com/langsmith/evaluation-concepts
     evaluate(
         target_function,
