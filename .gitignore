@@ -25,10 +25,8 @@ frontend/dist/
 # test
 tests/
 
-docs/
-
 # else
-study/
+docs/
 CLAUDE.md
 AGENTS.md
 DEVLOG.md

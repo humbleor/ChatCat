@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import re
 from collections import defaultdict
@@ -25,6 +26,7 @@ RETRIEVAL_TOP_K = int(os.getenv("RETRIEVAL_TOP_K", "5"))
 MILVUS_SOFT_DELETE_ENABLED = os.getenv("MILVUS_SOFT_DELETE_ENABLED", "false").lower() == "true"
 # Milvus 叶子层召回候选数；0 表示按 top_k * 3 自动推导
 RETRIEVAL_CANDIDATE_K = int(os.getenv("RETRIEVAL_CANDIDATE_K", "0"))
+logger = logging.getLogger(__name__)
 
 # 全局初始化检索依赖（与 api 共用 embedding_service）
 _milvus_store = get_milvus_store()
@@ -342,6 +344,27 @@ def decompose_question(query: str) -> dict:
 
 
 def retrieve_documents(query: str, top_k: int = RETRIEVAL_TOP_K) -> Dict[str, Any]:
+    def failed_meta(reason: str) -> Dict[str, Any]:
+        return {
+            "docs": [],
+            "meta": {
+                "rerank_enabled": bool(RERANK_MODEL and RERANK_API_KEY and RERANK_BINDING_HOST),
+                "rerank_applied": False,
+                "rerank_model": RERANK_MODEL,
+                "rerank_endpoint": _get_rerank_endpoint(),
+                "rerank_error": reason,
+                "retrieval_mode": "failed",
+                "candidate_k": candidate_k,
+                "leaf_retrieve_level": LEAF_RETRIEVE_LEVEL,
+                "auto_merge_enabled": AUTO_MERGE_ENABLED,
+                "auto_merge_applied": False,
+                "auto_merge_threshold": AUTO_MERGE_THRESHOLD,
+                "auto_merge_replaced_chunks": 0,
+                "auto_merge_steps": 0,
+                "candidate_count": 0,
+            },
+        }
+
     query = sanitize_text(query)
     # Milvus 叶子层召回候选数：显式配置优先，未配置则按 top_k * 3 自动推导；始终不小于 top_k
     candidate_k = max(RETRIEVAL_CANDIDATE_K if RETRIEVAL_CANDIDATE_K > 0 else top_k * 3, top_k)
@@ -349,56 +372,42 @@ def retrieve_documents(query: str, top_k: int = RETRIEVAL_TOP_K) -> Dict[str, An
     if MILVUS_SOFT_DELETE_ENABLED:
         filters.append("is_deleted == false")
     filter_expr = " and ".join(filters)
-    try:
-        dense_embeddings = _embedding_service.get_embeddings([query])
-        dense_embedding = dense_embeddings[0]
 
+    try:
+        dense_embedding = _embedding_service.get_embeddings([query])[0]
+    except Exception:
+        logger.exception("查询向量生成失败")
+        return failed_meta("embedding_failed")
+
+    retrieval_mode = "hybrid"
+    try:
         retrieved = _milvus_store.hybrid_retrieve(
             dense_embedding=dense_embedding,
             query=query,
             top_k=candidate_k,
             filter_expr=filter_expr,
         )
-        reranked, rerank_meta = _rerank_documents(query=query, docs=retrieved, top_k=top_k)
-        merged_docs, merge_meta = _auto_merge_documents(docs=reranked, top_k=top_k)
-        rerank_meta["retrieval_mode"] = "hybrid"
-        rerank_meta["candidate_k"] = candidate_k
-        rerank_meta["leaf_retrieve_level"] = LEAF_RETRIEVE_LEVEL
-        rerank_meta.update(merge_meta)
-        return {"docs": merged_docs, "meta": rerank_meta}
     except Exception:
+        logger.warning("混合检索失败，降级为稠密检索", exc_info=True)
+        retrieval_mode = "dense_fallback"
         try:
-            dense_embeddings = _embedding_service.get_embeddings([query])
-            dense_embedding = dense_embeddings[0]
             retrieved = _milvus_store.dense_retrieve(
                 dense_embedding=dense_embedding,
                 top_k=candidate_k,
                 filter_expr=filter_expr,
             )
-            reranked, rerank_meta = _rerank_documents(query=query, docs=retrieved, top_k=top_k)
-            merged_docs, merge_meta = _auto_merge_documents(docs=reranked, top_k=top_k)
-            rerank_meta["retrieval_mode"] = "dense_fallback"
-            rerank_meta["candidate_k"] = candidate_k
-            rerank_meta["leaf_retrieve_level"] = LEAF_RETRIEVE_LEVEL
-            rerank_meta.update(merge_meta)
-            return {"docs": merged_docs, "meta": rerank_meta}
         except Exception:
-            return {
-                "docs": [],
-                "meta": {
-                    "rerank_enabled": bool(RERANK_MODEL and RERANK_API_KEY and RERANK_BINDING_HOST),
-                    "rerank_applied": False,
-                    "rerank_model": RERANK_MODEL,
-                    "rerank_endpoint": _get_rerank_endpoint(),
-                    "rerank_error": "retrieve_failed",
-                    "retrieval_mode": "failed",
-                    "candidate_k": candidate_k,
-                    "leaf_retrieve_level": LEAF_RETRIEVE_LEVEL,
-                    "auto_merge_enabled": AUTO_MERGE_ENABLED,
-                    "auto_merge_applied": False,
-                    "auto_merge_threshold": AUTO_MERGE_THRESHOLD,
-                    "auto_merge_replaced_chunks": 0,
-                    "auto_merge_steps": 0,
-                    "candidate_count": 0,
-                },
-            }
+            logger.exception("稠密检索降级失败")
+            return failed_meta("retrieve_failed")
+
+    try:
+        reranked, rerank_meta = _rerank_documents(query=query, docs=retrieved, top_k=top_k)
+        merged_docs, merge_meta = _auto_merge_documents(docs=reranked, top_k=top_k)
+        rerank_meta["retrieval_mode"] = retrieval_mode
+        rerank_meta["candidate_k"] = candidate_k
+        rerank_meta["leaf_retrieve_level"] = LEAF_RETRIEVE_LEVEL
+        rerank_meta.update(merge_meta)
+        return {"docs": merged_docs, "meta": rerank_meta}
+    except Exception:
+        logger.exception("检索结果后处理失败")
+        return failed_meta("postprocess_failed")
