@@ -1,6 +1,7 @@
 from typing import List, Optional
+from uuid import uuid4
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class RegisterRequest(BaseModel):
@@ -30,6 +31,8 @@ class CurrentUserResponse(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     session_id: Optional[str] = "default_session"
+    request_id: str = Field(default_factory=lambda: f"req_{uuid4().hex}", min_length=1, max_length=128)
+    resume_run_id: Optional[str] = None
 
 
 class HitlCancelRequest(BaseModel):
@@ -88,6 +91,8 @@ class ChatResponse(BaseModel):
     response: str
     rag_trace: Optional[RagTrace] = None
     hitl: Optional[dict] = None
+    run_id: Optional[str] = None
+    status: Optional[str] = None
 
 
 class MessageInfo(BaseModel):
@@ -95,6 +100,8 @@ class MessageInfo(BaseModel):
     content: str
     timestamp: str
     rag_trace: Optional[RagTrace] = None
+    run_id: Optional[str] = None
+    hitl: Optional[dict] = None
 
 
 class SessionMessagesResponse(BaseModel):
@@ -106,6 +113,19 @@ class SessionInfo(BaseModel):
     updated_at: str
     message_count: int
     title: Optional[str] = None
+
+
+class ChatRunResponse(BaseModel):
+    run_id: str
+    session_id: str
+    status: str
+    created: bool = False
+    checkpoint_thread_id: str
+    output_text: str = ""
+    rag_trace: Optional[dict] = None
+    hitl: Optional[dict] = None
+    error_code: Optional[str] = None
+    error_detail: Optional[str] = None
 
 
 class SessionListResponse(BaseModel):

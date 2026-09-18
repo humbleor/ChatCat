@@ -8,6 +8,7 @@ import api from '@/utils/api';
 vi.mock('@/utils/api', () => ({
   default: {
     get: vi.fn(),
+    post: vi.fn(() => Promise.resolve({ data: { status: 'cancelled' } })),
     delete: vi.fn(),
   },
 }));
@@ -158,6 +159,11 @@ describe('chat store streaming sessions', () => {
     chatStore.userInput = '帮我总结一下文档';
     const sendPromise = chatStore.handleSend();
     await flushPromises();
+    const requestBody = JSON.parse(String(stream.fetchMock.mock.calls[0]?.[1]?.body));
+    expect(requestBody).toMatchObject({
+      request_id: expect.any(String),
+      resume_run_id: null,
+    });
 
     expect(sessionStore.sessions[0]).toMatchObject({
       session_id: 'session_current',
@@ -256,10 +262,13 @@ describe('chat store streaming sessions', () => {
     const sendPromise = chatStore.handleSend();
     await flushPromises();
 
+    stream.pushEvent({ type: 'run', run_id: 'run_to_cancel', status: 'running' });
+    await flushPromises();
     await chatStore.loadSession('session_other');
     chatStore.handleStop();
     await sendPromise;
 
+    expect(api.post).toHaveBeenCalledWith('/chat/runs/run_to_cancel/cancel');
     expect(chatStore.messagesBySession.session_current[1]).toMatchObject({
       text: '(已终止回答)',
       isThinking: false,

@@ -15,6 +15,8 @@ export const useChatStore = defineStore('chat', {
     sessionId: 'session_' + Date.now(),
     streamingSessionId: null as string | null,
     abortController: null as AbortController | null,
+    activeRunBySession: {} as Record<string, string>,
+    pendingResumeRunId: null as string | null,
   }),
 
   getters: {
@@ -79,6 +81,8 @@ export const useChatStore = defineStore('chat', {
           isUser: msg.type === 'human',
           ragTrace: msg.rag_trace || null,
           ...(thinkingText ? { thinkingText } : {}),
+          runId: msg.run_id || undefined,
+          hitl: msg.hitl || null,
         };
       });
     },
@@ -167,14 +171,25 @@ export const useChatStore = defineStore('chat', {
     },
 
     handleStop() {
+      const sessionId = this.streamingSessionId;
+      const runId = sessionId ? this.activeRunBySession[sessionId] : null;
+      if (runId) {
+        void api.post(`/chat/runs/${encodeURIComponent(runId)}/cancel`).catch((error) => {
+          console.warn('取消 Run 失败:', error);
+        });
+      }
       if (this.abortController) {
         this.abortController.abort();
       }
     },
 
-    async handleHitlReply(replyText: string) {
+    async handleHitlReply(replyText: string, runId?: string) {
       const text = (replyText || '').trim();
       if (!text || this.isLoading) return;
+      if (!runId) {
+        throw new Error('缺少 HITL 对应的 run_id，无法安全恢复');
+      }
+      this.pendingResumeRunId = runId;
       this.userInput = text;
       await this.handleSend();
     },
@@ -196,6 +211,8 @@ export const useChatStore = defineStore('chat', {
       }
 
       const requestSessionId = this.sessionId;
+      const requestId = globalThis.crypto?.randomUUID?.() || `req_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const resumeRunId = this.pendingResumeRunId;
       const requestMessages = this.ensureSessionMessages(requestSessionId);
       if (this.sessionId === requestSessionId) {
         this.messages = requestMessages;
@@ -226,6 +243,7 @@ export const useChatStore = defineStore('chat', {
       }
 
       this.userInput = '';
+      this.pendingResumeRunId = null;
       this.isLoading = true;
       this.streamingSessionId = requestSessionId;
 
@@ -242,7 +260,6 @@ export const useChatStore = defineStore('chat', {
       this.mergeCachedSessionsIntoHistory();
 
       this.abortController = new AbortController();
-      let streamHadError = false;
 
       try {
         const response = await fetch('/chat/stream', {
@@ -254,9 +271,15 @@ export const useChatStore = defineStore('chat', {
           body: JSON.stringify({
             message: text,
             session_id: requestSessionId,
+            request_id: requestId,
+            resume_run_id: resumeRunId,
           }),
           signal: this.abortController.signal,
         });
+        const responseRunId = response.headers?.get?.('X-Chat-Run-Id');
+        if (responseRunId) {
+          this.activeRunBySession[requestSessionId] = responseRunId;
+        }
 
         if (!response.ok) {
           if (response.status === 401) {
@@ -295,8 +318,15 @@ export const useChatStore = defineStore('chat', {
                   if (target) target.title = data.title;
                   continue;
                 }
-                if (data.type === 'error') {
-                  streamHadError = true;
+                if (data.type === 'run' && data.run_id) {
+                  if (['completed', 'failed', 'cancelled'].includes(data.status)) {
+                    delete this.activeRunBySession[requestSessionId];
+                  } else {
+                    this.activeRunBySession[requestSessionId] = data.run_id;
+                  }
+                }
+                if (data.type === 'hitl_request' && data.run_id) {
+                  this.activeRunBySession[requestSessionId] = data.run_id;
                 }
                 const botMsg = requestMessages[botMsgIdx];
                 if (!botMsg) continue;
@@ -308,7 +338,7 @@ export const useChatStore = defineStore('chat', {
           }
         }
       } catch (error: any) {
-        streamHadError = true;
+        delete this.activeRunBySession[requestSessionId];
         const botMsg = requestMessages[botMsgIdx];
         if (!botMsg) return;
         if (error.name === 'AbortError') {

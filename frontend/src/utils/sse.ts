@@ -8,16 +8,15 @@ const _THINK_OPEN = '<think>';
 const _THINK_CLOSE = '</think>';
 const _THINK_RE = /<think>[\s\S]*?<\/think>/g;
 
-interface _ThinkState { hiding: boolean }
+interface _ThinkState {
+  hiding: boolean;
+}
 
 /**
  * 消费一段入站 content，把 think 块内容路由到 hidden，text 内容路由到 visible。
  * 单次扫描：找到 <think> → 切到隐藏态；找到 </think> → 切回可见态。
  */
-export function consumeThink(
-  input: string,
-  state: _ThinkState,
-): { visible: string; hidden: string; hiding: boolean } {
+export function consumeThink(input: string, state: _ThinkState): { visible: string; hidden: string; hiding: boolean } {
   let remaining = input;
   let visible = '';
   let hidden = '';
@@ -88,6 +87,8 @@ export function appendRagStepToGroups(prev: GroupedRagStep[], step: RagStep): Gr
  */
 export function applySseEvent(msg: Message, data: any): Message {
   switch (data?.type) {
+    case 'run':
+      return { ...msg, runId: data.run_id || msg.runId };
     case 'content': {
       const incoming = data.content || '';
       const { visible, hidden, hiding } = consumeThink(incoming, { hiding: msg._hidingThink || false });
@@ -115,6 +116,7 @@ export function applySseEvent(msg: Message, data: any): Message {
         isThinking: false,
         hitl: data.hitl,
         text: msg.text || '',
+        runId: data.run_id || data.hitl?.run_id || msg.runId,
       };
     default:
       return msg;

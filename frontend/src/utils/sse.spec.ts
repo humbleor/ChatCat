@@ -10,9 +10,18 @@ describe('applySseEvent', () => {
     expect(out.isThinking).toBe(false);
   });
 
+  it('binds run events to the assistant message', () => {
+    const msg = { text: '', isUser: false } as Message;
+    const out = applySseEvent(msg, { type: 'run', run_id: 'run_123', status: 'running' });
+    expect(out.runId).toBe('run_123');
+  });
+
   it('stores hitl_request', () => {
     const msg = { text: '', isUser: false, isThinking: true } as Message;
-    const out = applySseEvent(msg, { type: 'hitl_request', hitl: { route: 'scope_select', prompt: '选一个', options: ['A', 'B'] } });
+    const out = applySseEvent(msg, {
+      type: 'hitl_request',
+      hitl: { route: 'scope_select', prompt: '选一个', options: ['A', 'B'] },
+    });
     expect(out.isThinking).toBe(false);
     expect(out.hitl?.prompt).toBe('选一个');
     expect(out.hitl?.options).toEqual(['A', 'B']);

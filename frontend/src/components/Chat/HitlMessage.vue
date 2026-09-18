@@ -32,7 +32,7 @@ import { ref } from 'vue';
 import { useChatStore } from '@/stores/chat';
 import type { Message } from '@/types/chat';
 
-defineProps<{
+const props = defineProps<{
   msg: Message;
 }>();
 
@@ -42,7 +42,7 @@ const replyText = ref('');
 const handleReply = async (text: string) => {
   const value = (text || '').trim();
   if (!value) return;
-  await chatStore.handleHitlReply(value);
+  await chatStore.handleHitlReply(value, props.msg.runId || props.msg.hitl?.run_id);
   replyText.value = '';
 };
 </script>

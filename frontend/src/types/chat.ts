@@ -81,6 +81,7 @@ export interface GroupedRagStep {
 
 export interface HitlRequest {
   route?: 'clarify' | 'scope_select';
+  run_id?: string;
   prompt: string;
   options?: string[];
 }
@@ -98,6 +99,7 @@ export interface Message {
   /** transient: 流式消费时是否正位于 <think>...</think> 内；不持久化 */
   _hidingThink?: boolean;
   hitl?: HitlRequest | null;
+  runId?: string;
 }
 
 export interface ChatSession {

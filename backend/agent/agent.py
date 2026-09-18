@@ -15,7 +15,7 @@ from langgraph.types import Command
 
 from backend.infra.cache import cache
 from backend.infra.database import SessionLocal
-from backend.models.models import ChatMessage, ChatSession, User
+from backend.models.models import ChatMessage, ChatRun, ChatSession, User
 from backend.rag.hitl_detect import format_hitl_message, normalize_rag_trace
 
 logger = logging.getLogger(__name__)
@@ -93,6 +93,8 @@ class ConversationStorage:
             extra = {
                 "_db_id": msg_data.get("id"),
                 "_token_count": msg_data.get("token_count", 0),
+                "_run_id": msg_data.get("run_id"),
+                "_hitl": msg_data.get("hitl"),
             }
             if msg_type in ("system", "summary"):
                 extra["_msg_type"] = msg_type
@@ -109,7 +111,17 @@ class ConversationStorage:
         return messages
 
     def save(
-        self, user_id: str, session_id: str, messages: list, metadata: dict = None, extra_message_data: list = None
+        self,
+        user_id: str,
+        session_id: str,
+        messages: list,
+        metadata: dict = None,
+        extra_message_data: list = None,
+        run_id: str | None = None,
+        run_target_status: str | None = None,
+        run_output_text: str | None = None,
+        run_rag_trace: dict | None = None,
+        run_hitl: dict | None = None,
     ):
         """增量保存对话：只 INSERT 新消息，UPDATE superseded_by 标记。"""
         db = SessionLocal()
@@ -129,6 +141,18 @@ class ConversationStorage:
                 db.flush()
             elif metadata:
                 session.metadata_json = metadata
+
+            run = None
+            if run_id and run_target_status:
+                run = (
+                    db.query(ChatRun)
+                    .filter(ChatRun.id == run_id, ChatRun.session_ref_id == session.id)
+                    .with_for_update()
+                    .first()
+                )
+                if not run or run.status != "running":
+                    db.rollback()
+                    return False
 
             # 获取当前最大 message_index
             max_idx_row = (
@@ -157,6 +181,8 @@ class ConversationStorage:
                             "timestamp": msg.additional_kwargs.get("_timestamp", now.isoformat() + "Z"),
                             "token_count": msg.additional_kwargs.get("_token_count", 0),
                             "rag_trace": normalize_rag_trace(msg.additional_kwargs.get("_rag_trace")),
+                            "run_id": msg.additional_kwargs.get("_run_id"),
+                            "hitl": msg.additional_kwargs.get("_hitl"),
                         }
                     )
                     continue
@@ -174,6 +200,7 @@ class ConversationStorage:
 
                 new_msg = ChatMessage(
                     session_ref_id=session.id,
+                    run_id=run_id,
                     message_type=msg_type,
                     content=str(msg.content),
                     timestamp=now,
@@ -185,6 +212,9 @@ class ConversationStorage:
                 db.flush()  # 获取 id
 
                 db_id = new_msg.id
+                msg.additional_kwargs["_db_id"] = db_id
+                msg.additional_kwargs["_token_count"] = tk
+                msg.additional_kwargs["_run_id"] = run_id
                 next_index += 1
 
                 # 标记被此摘要覆盖的消息
@@ -199,17 +229,29 @@ class ConversationStorage:
                         "token_count": tk,
                         "timestamp": now.isoformat() + "Z",
                         "rag_trace": rag_trace,
+                        "run_id": run_id,
+                        "hitl": run_hitl if msg_type == "ai" else None,
                     }
                 )
 
             session.updated_at = now
-            db.commit()
+            if run is not None:
+                run.status = run_target_status
+                run.output_text = run_output_text or ""
+                run.rag_trace = run_rag_trace
+                run.hitl_json = run_hitl
+                run.updated_at = now
+                if run_target_status in {"completed", "failed", "cancelled"}:
+                    run.finished_at = now
 
+            db.commit()
             cache.set_json(self._messages_cache_key(user_id, session_id), serialized)
             cache.delete(self._sessions_cache_key(user_id))
+            return True
         except Exception:
             db.rollback()
             logger.exception("Failed to save conversation for user=%s session=%s", user_id, session_id)
+            return False
         finally:
             db.close()
 
@@ -323,6 +365,14 @@ class ConversationStorage:
                 .order_by(ChatMessage.message_index.asc())
                 .all()
             )
+            run_ids = {row.run_id for row in rows if row.run_id}
+            run_hitl = {}
+            if run_ids:
+                run_hitl = {
+                    run.id: run.hitl_json
+                    for run in db.query(ChatRun).filter(ChatRun.id.in_(run_ids)).all()
+                    if run.hitl_json
+                }
             result = [
                 {
                     "id": row.id,
@@ -331,6 +381,8 @@ class ConversationStorage:
                     "timestamp": row.timestamp.isoformat() + "Z",
                     "rag_trace": normalize_rag_trace(row.rag_trace),
                     "token_count": row.token_count,
+                    "run_id": row.run_id,
+                    "hitl": run_hitl.get(row.run_id) if row.message_type == "ai" else None,
                 }
                 for row in rows
             ]
@@ -491,8 +543,11 @@ def _update_persistent_note_sync(current_note, user_text, ai_response, *, histor
 
 
 # ---------- 图编排 ----------
-def _session_thread_config(user_id: str, session_id: str) -> dict:
-    return {"configurable": {"thread_id": f"{user_id}:{session_id}"}}
+def _session_thread_config(user_id: str, session_id: str, run_id: str | None = None) -> dict:
+    thread_id = f"{user_id}:{session_id}"
+    if run_id:
+        thread_id = f"{thread_id}:{run_id}"
+    return {"configurable": {"thread_id": thread_id}}
 
 
 def _history_dicts(messages: list) -> list[dict]:
@@ -520,25 +575,22 @@ def _run_graph_turn(input_data: dict, cfg: dict) -> tuple[list[dict], dict, dict
     return [d for _kind, d in events], snap, pending
 
 
-def chat_with_agent(user_text: str, user_id: str = "default_user", session_id: str = "default_session"):
+def chat_with_agent(
+    user_text: str,
+    user_id: str = "default_user",
+    session_id: str = "default_session",
+    *,
+    run_id: str,
+    resume: bool = False,
+):
     messages, metadata = storage.load_with_meta(user_id, session_id)
     persistent_note = metadata.get("persistent_note", "")
-    is_first_message = len(messages) == 0
-
-    user_msg = HumanMessage(content=user_text)
-    user_msg.additional_kwargs["_token_count"] = count_tokens(user_text)
-    messages.append(user_msg)
+    is_first_message = len(messages) == 1
     messages = _manage_context_window(messages, _get_context_model())
 
-    from backend.infra.checkpointer import get_checkpointer
-    from backend.rag.chat_graph import build_chat_graph
+    cfg = _session_thread_config(user_id, session_id, run_id)
 
-    cfg = _session_thread_config(user_id, session_id)
-    graph = build_chat_graph(checkpointer=get_checkpointer())
-    snap = graph.get_state(cfg)
-    pending = bool(snap.tasks and getattr(snap.tasks[0], "interrupts", None))
-
-    if pending:
+    if resume:
         input_data = Command(resume=user_text)
     else:
         input_data = {
@@ -554,18 +606,38 @@ def chat_with_agent(user_text: str, user_id: str = "default_user", session_id: s
             full_response += ev.get("content", "")
 
     if hitl_value is not None:
+        hitl_value = dict(hitl_value)
+        hitl_value["run_id"] = run_id
+        rag_trace = normalize_rag_trace(final_snap.values.get("rag_trace") if hasattr(final_snap, "values") else None)
         prompt = hitl_value.get("prompt", "")
         options = hitl_value.get("options") or []
         hitl_text = format_hitl_message(prompt, options)
-        rag_trace = normalize_rag_trace(final_snap.values.get("rag_trace") if hasattr(final_snap, "values") else None)
         messages.append(AIMessage(content=hitl_text))
         extra = [None] * (len(messages) - 1) + [{"rag_trace": rag_trace}]
         save_meta = dict(metadata)
         title = _title_for(metadata, is_first_message, user_text)
         if title:
             save_meta["title"] = title
-        storage.save(user_id, session_id, messages, metadata=save_meta, extra_message_data=extra)
-        return {"response": hitl_text, "rag_trace": rag_trace, "hitl": hitl_value}
+        saved = storage.save(
+            user_id,
+            session_id,
+            messages,
+            metadata=save_meta,
+            extra_message_data=extra,
+            run_id=run_id,
+            run_target_status="waiting_hitl",
+            run_rag_trace=rag_trace,
+            run_hitl=hitl_value,
+        )
+        if not saved:
+            return {"response": "", "rag_trace": rag_trace, "run_id": run_id, "status": "cancelled"}
+        return {
+            "response": hitl_text,
+            "rag_trace": rag_trace,
+            "hitl": hitl_value,
+            "run_id": run_id,
+            "status": "waiting_hitl",
+        }
 
     rag_trace = normalize_rag_trace(final_snap.values.get("rag_trace") if hasattr(final_snap, "values") else None)
     full_response = full_response or (final_snap.values.get("response") if hasattr(final_snap, "values") else "")
@@ -581,34 +653,51 @@ def chat_with_agent(user_text: str, user_id: str = "default_user", session_id: s
         )
     messages.append(AIMessage(content=full_response))
     extra = [None] * (len(messages) - 1) + [{"rag_trace": rag_trace}]
-    storage.save(user_id, session_id, messages, metadata=save_meta, extra_message_data=extra)
-    return {"response": full_response, "rag_trace": rag_trace}
+    saved = storage.save(
+        user_id,
+        session_id,
+        messages,
+        metadata=save_meta,
+        extra_message_data=extra,
+        run_id=run_id,
+        run_target_status="completed",
+        run_output_text=full_response,
+        run_rag_trace=rag_trace,
+    )
+    if not saved:
+        return {"response": "", "rag_trace": rag_trace, "run_id": run_id, "status": "cancelled"}
+    return {"response": full_response, "rag_trace": rag_trace, "run_id": run_id, "status": "completed"}
 
 
-async def chat_with_agent_stream(user_text: str, user_id: str = "default_user", session_id: str = "default_session"):
+async def chat_with_agent_stream(
+    user_text: str,
+    user_id: str = "default_user",
+    session_id: str = "default_session",
+    *,
+    run_id: str,
+    resume: bool = False,
+):
     """流式驱动图：把整轮跑进线程，将 custom 事件经 asyncio.Queue 转发为 SSE。"""
+    from backend.agent.run_manager import mark_failed
+
+    yield f"data: {json.dumps({'type': 'run', 'run_id': run_id, 'status': 'running'})}\n\n"
     yield f"data: {json.dumps({'type': 'rag_step', 'step': {'icon': '📨', 'label': '请求已接收，正在准备回答'}})}\n\n"
 
     messages, metadata = storage.load_with_meta(user_id, session_id)
     persistent_note = metadata.get("persistent_note", "")
-    is_first_message = len(messages) == 0
+    is_first_message = len(messages) == 1
 
-    user_msg = HumanMessage(content=user_text)
-    user_msg.additional_kwargs["_token_count"] = count_tokens(user_text)
-    messages.append(user_msg)
     messages = _manage_context_window(messages, _get_context_model())
 
     from backend.infra.checkpointer import get_checkpointer
     from backend.rag.chat_graph import build_chat_graph
 
-    cfg = _session_thread_config(user_id, session_id)
+    cfg = _session_thread_config(user_id, session_id, run_id)
     graph = build_chat_graph(checkpointer=get_checkpointer())
-    snap = await asyncio.to_thread(graph.get_state, cfg)
-    pending = bool(snap.tasks and getattr(snap.tasks[0], "interrupts", None))
 
     input_data = (
         Command(resume=user_text)
-        if pending
+        if resume
         else {
             "user_text": user_text,
             "persistent_note": persistent_note,
@@ -617,6 +706,7 @@ async def chat_with_agent_stream(user_text: str, user_id: str = "default_user", 
     )
 
     output_queue: asyncio.Queue = asyncio.Queue()
+    worker_error: list[str] = []
     # asyncio.Queue 非线程安全：_worker 跑在 to_thread 的 executor 线程里，
     # 必须经由捕获的事件循环用 call_soon_threadsafe 投递，否则并发 put 会撕裂队列。
     loop = asyncio.get_running_loop()
@@ -632,6 +722,7 @@ async def chat_with_agent_stream(user_text: str, user_id: str = "default_user", 
                 _safe_put(data)
             _safe_put(None)
         except Exception as e:
+            worker_error.append(str(e))
             _safe_put({"type": "error", "content": str(e)})
             _safe_put(None)
 
@@ -655,13 +746,19 @@ async def chat_with_agent_stream(user_text: str, user_id: str = "default_user", 
                 yield f"data: {json.dumps(ev)}\n\n"
             elif ev.get("type") == "error":
                 yield f"data: {json.dumps(ev)}\n\n"
-    except GeneratorExit:
+    except (GeneratorExit, asyncio.CancelledError):
+        mark_failed(run_id, "客户端已断开连接", code="CLIENT_DISCONNECTED")
         task.cancel()
         raise
     finally:
         if not task.done():
             task.cancel()
 
+    if worker_error:
+        mark_failed(run_id, worker_error[0])
+        yield f"data: {json.dumps({'type': 'run', 'run_id': run_id, 'status': 'failed'})}\n\n"
+        yield "data: [DONE]\n\n"
+        return
     snap = await asyncio.to_thread(graph.get_state, cfg)
     hitl_value = None
     if snap.tasks and getattr(snap.tasks[0], "interrupts", None):
@@ -676,6 +773,7 @@ async def chat_with_agent_stream(user_text: str, user_id: str = "default_user", 
             "route": hitl_value.get("route"),
             "prompt": hitl_value.get("prompt"),
             "options": hitl_value.get("options") or [],
+            "run_id": run_id,
         }
         hitl_text = format_hitl_message(hitl_event["prompt"], hitl_event["options"])
         messages.append(AIMessage(content=hitl_text))
@@ -683,14 +781,29 @@ async def chat_with_agent_stream(user_text: str, user_id: str = "default_user", 
         save_meta = dict(metadata)
         if session_title:
             save_meta["title"] = session_title
-        storage.save(user_id, session_id, messages, metadata=save_meta, extra_message_data=extra)
-        yield f"data: {json.dumps({'type': 'hitl_request', 'hitl': hitl_event})}\n\n"
+        saved = storage.save(
+            user_id,
+            session_id,
+            messages,
+            metadata=save_meta,
+            extra_message_data=extra,
+            run_id=run_id,
+            run_target_status="waiting_hitl",
+            run_rag_trace=rag_trace,
+            run_hitl=hitl_event,
+        )
+        if not saved:
+            yield f"data: {json.dumps({'type': 'run', 'run_id': run_id, 'status': 'cancelled'})}\n\n"
+            yield "data: [DONE]\n\n"
+            return
+        yield f"data: {json.dumps({'type': 'hitl_request', 'run_id': run_id, 'hitl': hitl_event})}\n\n"
         yield "data: [DONE]\n\n"
         return
 
     full_response = full_response or snap.values.get("response", "")
 
     save_meta = dict(metadata)
+
     if session_title:
         save_meta["title"] = session_title
     if _should_update_persistent_note(messages, persistent_note):
@@ -705,6 +818,21 @@ async def chat_with_agent_stream(user_text: str, user_id: str = "default_user", 
             print(f"Update persistent note error: {e}")
     messages.append(AIMessage(content=full_response))
     extra = [None] * (len(messages) - 1) + [{"rag_trace": rag_trace}]
-    storage.save(user_id, session_id, messages, metadata=save_meta, extra_message_data=extra)
+    saved = storage.save(
+        user_id,
+        session_id,
+        messages,
+        metadata=save_meta,
+        extra_message_data=extra,
+        run_id=run_id,
+        run_target_status="completed",
+        run_output_text=full_response,
+        run_rag_trace=rag_trace,
+    )
+    if not saved:
+        yield f"data: {json.dumps({'type': 'run', 'run_id': run_id, 'status': 'cancelled'})}\n\n"
+        yield "data: [DONE]\n\n"
+        return
+    yield f"data: {json.dumps({'type': 'run', 'run_id': run_id, 'status': 'completed'})}\n\n"
 
     yield "data: [DONE]\n\n"

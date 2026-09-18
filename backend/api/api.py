@@ -8,10 +8,20 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from backend.agent.agent import chat_with_agent, chat_with_agent_stream, storage
+from backend.agent.run_manager import (
+    ChatRunError,
+    RunReservation,
+    cancel_run,
+    get_run,
+    mark_failed,
+    reserve_resume,
+    reserve_run,
+)
 from backend.api.schemas import (
     AuthResponse,
     ChatRequest,
     ChatResponse,
+    ChatRunResponse,
     CurrentUserResponse,
     DocumentDeleteJobResponse,
     DocumentDeleteResponse,
@@ -62,6 +72,48 @@ milvus_writer = MilvusWriter(embedding_service=embedding_service, milvus_store=m
 router = APIRouter()
 
 
+def _run_http_error(exc: ChatRunError) -> HTTPException:
+    return HTTPException(
+        status_code=exc.status_code,
+        detail={"code": exc.code, "message": str(exc), "run_id": exc.run_id},
+    )
+
+
+def _reserve_chat(request: ChatRequest, username: str) -> RunReservation:
+    session_id = request.session_id or "default_session"
+    try:
+        if request.resume_run_id:
+            return reserve_resume(
+                username=username,
+                session_id=session_id,
+                run_id=request.resume_run_id,
+                answer=request.message,
+                request_id=request.request_id,
+            )
+        return reserve_run(
+            username=username,
+            session_id=session_id,
+            message=request.message,
+            request_id=request.request_id,
+        )
+    except ChatRunError as exc:
+        raise _run_http_error(exc) from exc
+
+
+async def _replay_run_stream(run: RunReservation):
+    yield f"data: {json.dumps({'type': 'run', 'run_id': run.run_id, 'status': run.status})}\n\n"
+    if run.status == "completed":
+        if run.output_text:
+            yield f"data: {json.dumps({'type': 'content', 'content': run.output_text})}\n\n"
+        if run.rag_trace:
+            yield f"data: {json.dumps({'type': 'trace', 'rag_trace': run.rag_trace})}\n\n"
+    elif run.status == "waiting_hitl" and run.hitl:
+        yield f"data: {json.dumps({'type': 'hitl_request', 'run_id': run.run_id, 'hitl': run.hitl})}\n\n"
+    elif run.status == "failed":
+        yield f"data: {json.dumps({'type': 'error', 'content': run.error_detail or 'Run 执行失败'})}\n\n"
+    yield "data: [DONE]\n\n"
+
+
 @router.post("/auth/register", response_model=AuthResponse)
 async def register(request: RegisterRequest, db: Session = Depends(get_db)):
     username = (request.username or "").strip()
@@ -106,6 +158,8 @@ async def get_session_messages(session_id: str, current_user: User = Depends(get
                 content=msg["content"],
                 timestamp=msg.get("timestamp", ""),
                 rag_trace=msg.get("rag_trace"),
+                hitl=msg.get("hitl"),
+                run_id=msg.get("run_id"),
             )
             for msg in storage.get_session_messages(current_user.username, session_id)
         ]
@@ -141,14 +195,30 @@ async def delete_session(session_id: str, current_user: User = Depends(get_curre
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat_endpoint(request: ChatRequest, current_user: User = Depends(get_current_user)):
+    run = _reserve_chat(request, current_user.username)
+    if not run.created:
+        return ChatResponse(
+            response=run.output_text,
+            rag_trace=run.rag_trace,
+            hitl=run.hitl,
+            run_id=run.run_id,
+            status=run.status,
+        )
+
     try:
-        session_id = request.session_id or "default_session"
-        resp = chat_with_agent(request.message, current_user.username, session_id)
+        resp = chat_with_agent(
+            request.message,
+            current_user.username,
+            run.session_id,
+            run_id=run.run_id,
+            resume=bool(request.resume_run_id),
+        )
         if isinstance(resp, dict):
             return ChatResponse(**resp)
         return ChatResponse(response=resp)
     except Exception as e:
         message = str(e)
+        mark_failed(run.run_id, message)
         match = re.search(r"Error code:\s*(\d{3})", message)
         if match:
             code = int(match.group(1))
@@ -156,35 +226,73 @@ async def chat_endpoint(request: ChatRequest, current_user: User = Depends(get_c
                 raise HTTPException(
                     status_code=429,
                     detail=(f"上游模型服务触发限流/额度限制（429）。请检查账号额度/模型状态。\n原始错误：{message}"),
-                )
+                ) from e
             if code in (401, 403):
-                raise HTTPException(status_code=code, detail=message)
-            raise HTTPException(status_code=code, detail=message)
-        raise HTTPException(status_code=500, detail=message)
+                raise HTTPException(status_code=code, detail=message) from e
+            raise HTTPException(status_code=code, detail=message) from e
+        raise HTTPException(status_code=500, detail=message) from e
 
 
 @router.post("/chat/stream")
 async def chat_stream_endpoint(request: ChatRequest, current_user: User = Depends(get_current_user)):
     """跟 Agent 对话 (流式)"""
+    run = _reserve_chat(request, current_user.username)
+    if not run.created:
+        stream = _replay_run_stream(run)
+    else:
 
-    async def event_generator():
-        try:
-            session_id = request.session_id or "default_session"
-            async for chunk in chat_with_agent_stream(request.message, current_user.username, session_id):
-                yield chunk
-        except Exception as e:
-            error_data = {"type": "error", "content": str(e)}
-            yield f"data: {json.dumps(error_data)}\n\n"
+        async def event_generator():
+            try:
+                async for chunk in chat_with_agent_stream(
+                    request.message,
+                    current_user.username,
+                    run.session_id,
+                    run_id=run.run_id,
+                    resume=bool(request.resume_run_id),
+                ):
+                    yield chunk
+            except Exception as e:
+                mark_failed(run.run_id, str(e))
+                error_data = {"type": "error", "content": str(e), "run_id": run.run_id}
+                yield f"data: {json.dumps(error_data)}\n\n"
+                yield "data: [DONE]\n\n"
+
+        stream = event_generator()
 
     return StreamingResponse(
-        event_generator(),
+        stream,
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache, no-store, must-revalidate",
+            "X-Chat-Run-Id": run.run_id,
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.get("/chat/runs/{run_id}", response_model=ChatRunResponse)
+async def get_chat_run(run_id: str, current_user: User = Depends(get_current_user)):
+    try:
+        return ChatRunResponse(**get_run(username=current_user.username, run_id=run_id).public_dict())
+    except ChatRunError as exc:
+        raise _run_http_error(exc) from exc
+
+
+@router.post("/chat/runs/{run_id}/cancel", response_model=ChatRunResponse)
+async def cancel_chat_run(run_id: str, current_user: User = Depends(get_current_user)):
+    from backend.infra.checkpointer import get_checkpointer
+
+    try:
+        before = get_run(username=current_user.username, run_id=run_id)
+        cancelled = cancel_run(username=current_user.username, run_id=run_id)
+        if before.status == "waiting_hitl":
+            get_checkpointer().delete_thread(before.checkpoint_thread_id)
+        return ChatRunResponse(**cancelled.public_dict())
+    except ChatRunError as exc:
+        raise _run_http_error(exc) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @router.post("/chat/hitl/cancel")
