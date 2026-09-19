@@ -154,9 +154,11 @@ def retrieve_initial(state: RAGState) -> RAGState:
         "retrieval_stage": "initial",
         "rerank_enabled": retrieve_meta.get("rerank_enabled"),
         "rerank_applied": retrieve_meta.get("rerank_applied"),
+        "rerank_provider": retrieve_meta.get("rerank_provider"),
         "rerank_model": retrieve_meta.get("rerank_model"),
         "rerank_endpoint": retrieve_meta.get("rerank_endpoint"),
         "rerank_error": retrieve_meta.get("rerank_error"),
+        "rerank_latency_ms": retrieve_meta.get("rerank_latency_ms"),
         "retrieval_mode": retrieve_meta.get("retrieval_mode"),
         "candidate_k": retrieve_meta.get("candidate_k"),
         "leaf_retrieve_level": retrieve_meta.get("leaf_retrieve_level"),
@@ -311,8 +313,10 @@ def retrieve_expanded(state: RAGState) -> RAGState:
     results: List[dict] = []
     rerank_applied_any = False
     rerank_enabled_any = False
+    rerank_provider = None
     rerank_model = None
     rerank_endpoint = None
+    rerank_latency_ms = 0.0
     rerank_errors = []
     retrieval_mode = None
     candidate_k = None
@@ -339,8 +343,10 @@ def retrieve_expanded(state: RAGState) -> RAGState:
         )
         rerank_applied_any = rerank_applied_any or bool(hyde_meta.get("rerank_applied"))
         rerank_enabled_any = rerank_enabled_any or bool(hyde_meta.get("rerank_enabled"))
+        rerank_provider = rerank_provider or hyde_meta.get("rerank_provider")
         rerank_model = rerank_model or hyde_meta.get("rerank_model")
         rerank_endpoint = rerank_endpoint or hyde_meta.get("rerank_endpoint")
+        rerank_latency_ms += float(hyde_meta.get("rerank_latency_ms") or 0.0)
         if hyde_meta.get("rerank_error"):
             rerank_errors.append(f"hyde:{hyde_meta.get('rerank_error')}")
         retrieval_mode = retrieval_mode or hyde_meta.get("retrieval_mode")
@@ -370,8 +376,10 @@ def retrieve_expanded(state: RAGState) -> RAGState:
         )
         rerank_applied_any = rerank_applied_any or bool(step_meta.get("rerank_applied"))
         rerank_enabled_any = rerank_enabled_any or bool(step_meta.get("rerank_enabled"))
+        rerank_provider = rerank_provider or step_meta.get("rerank_provider")
         rerank_model = rerank_model or step_meta.get("rerank_model")
         rerank_endpoint = rerank_endpoint or step_meta.get("rerank_endpoint")
+        rerank_latency_ms += float(step_meta.get("rerank_latency_ms") or 0.0)
         if step_meta.get("rerank_error"):
             rerank_errors.append(f"step_back:{step_meta.get('rerank_error')}")
         retrieval_mode = retrieval_mode or step_meta.get("retrieval_mode")
@@ -405,8 +413,10 @@ def retrieve_expanded(state: RAGState) -> RAGState:
             )
             rerank_applied_any = rerank_applied_any or bool(sub_meta.get("rerank_applied"))
             rerank_enabled_any = rerank_enabled_any or bool(sub_meta.get("rerank_enabled"))
+            rerank_provider = rerank_provider or sub_meta.get("rerank_provider")
             rerank_model = rerank_model or sub_meta.get("rerank_model")
             rerank_endpoint = rerank_endpoint or sub_meta.get("rerank_endpoint")
+            rerank_latency_ms += float(sub_meta.get("rerank_latency_ms") or 0.0)
             if sub_meta.get("rerank_error"):
                 rerank_errors.append(f"subq{idx}:{sub_meta.get('rerank_error')}")
             retrieval_mode = retrieval_mode or sub_meta.get("retrieval_mode")
@@ -449,9 +459,11 @@ def retrieve_expanded(state: RAGState) -> RAGState:
             "retrieval_stage": "expanded",
             "rerank_enabled": rerank_enabled_any,
             "rerank_applied": rerank_applied_any,
+            "rerank_provider": rerank_provider,
             "rerank_model": rerank_model,
             "rerank_endpoint": rerank_endpoint,
             "rerank_error": "; ".join(rerank_errors) if rerank_errors else None,
+            "rerank_latency_ms": round(rerank_latency_ms, 1),
             "retrieval_mode": retrieval_mode,
             "candidate_k": candidate_k,
             "leaf_retrieve_level": leaf_retrieve_level,

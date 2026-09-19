@@ -65,9 +65,11 @@ class RagTrace(BaseModel):
     rewrite_query: Optional[str] = None
     rerank_enabled: Optional[bool] = None
     rerank_applied: Optional[bool] = None
+    rerank_provider: Optional[str] = None
     rerank_model: Optional[str] = None
     rerank_endpoint: Optional[str] = None
     rerank_error: Optional[str] = None
+    rerank_latency_ms: Optional[float] = None
     retrieval_mode: Optional[str] = None
     candidate_k: Optional[int] = None
     leaf_retrieve_level: Optional[int] = None

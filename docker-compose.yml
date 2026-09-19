@@ -102,6 +102,32 @@ services:
     networks:
       - default  
 
+  reranker:
+    container_name: chatcat-reranker
+    profiles: ["reranker"]
+    image: ${TEI_RERANKER_IMAGE:-ghcr.io/huggingface/text-embeddings-inference:cpu-1.9}
+    command:
+      - --model-id
+      - ${TEI_RERANKER_MODEL:-BAAI/bge-reranker-v2-m3}
+      - --auto-truncate
+      - --max-client-batch-size
+      - ${TEI_MAX_CLIENT_BATCH_SIZE:-32}
+      - --max-concurrent-requests
+      - ${TEI_MAX_CONCURRENT_REQUESTS:-32}
+    environment:
+      HF_TOKEN: ${HF_TOKEN:-}
+    ports:
+      - "${TEI_RERANKER_PORT:-8081}:80"
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/huggingface:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 15s
+      timeout: 5s
+      start_period: 180s
+      retries: 10
+    restart: unless-stopped
+
 networks:
   default:
     name: milvus

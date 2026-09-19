@@ -3,22 +3,23 @@ import logging
 import os
 import re
 from collections import defaultdict
+from time import monotonic
 from typing import Any, Dict, List, Tuple
 
-import requests
 from langchain.chat_models import init_chat_model
 
 from backend.document.parent_chunk_store import ParentChunkStore
 from backend.document.text_sanitizer import sanitize_text
+from backend.rag.reranker import RerankerError, reranker_client
 from backend.vector.embedding import embedding_service as _embedding_service
 from backend.vector.milvus_client import get_milvus_store
 
 API_KEY = os.getenv("LLM_API_KEY")
 MODEL = os.getenv("LLM_MODEL")
 BASE_URL = os.getenv("LLM_BASE_URL")
-RERANK_MODEL = os.getenv("RERANK_MODEL")
-RERANK_BINDING_HOST = os.getenv("RERANK_BINDING_HOST")
-RERANK_API_KEY = os.getenv("RERANK_API_KEY")
+RERANK_MODEL = reranker_client.settings.model
+RERANK_BINDING_HOST = reranker_client.settings.base_url
+RERANK_API_KEY = reranker_client.settings.api_key
 AUTO_MERGE_ENABLED = os.getenv("AUTO_MERGE_ENABLED", "true").lower() != "false"
 AUTO_MERGE_THRESHOLD = int(os.getenv("AUTO_MERGE_THRESHOLD", "2"))
 LEAF_RETRIEVE_LEVEL = int(os.getenv("LEAF_RETRIEVE_LEVEL", "3"))
@@ -36,10 +37,7 @@ _stepback_model = None
 
 
 def _get_rerank_endpoint() -> str:
-    if not RERANK_BINDING_HOST:
-        return ""
-    host = RERANK_BINDING_HOST.strip().rstrip("/")
-    return host if host.endswith("/v1/rerank") else f"{host}/v1/rerank"
+    return reranker_client.settings.endpoint
 
 
 THINK_RE = re.compile(r"<think>[\s\S]*?</think>", re.DOTALL)
@@ -126,60 +124,42 @@ def _auto_merge_documents(docs: List[dict], top_k: int) -> Tuple[List[dict], Dic
 
 def _rerank_documents(query: str, docs: List[dict], top_k: int) -> Tuple[List[dict], Dict[str, Any]]:
     docs_with_rank = [{**doc, "rrf_rank": i} for i, doc in enumerate(docs, 1)]
+    settings = reranker_client.settings
     meta: Dict[str, Any] = {
-        "rerank_enabled": bool(RERANK_MODEL and RERANK_API_KEY and RERANK_BINDING_HOST),
+        "rerank_enabled": settings.enabled,
         "rerank_applied": False,
-        "rerank_model": RERANK_MODEL,
-        "rerank_endpoint": _get_rerank_endpoint(),
+        "rerank_provider": settings.provider,
+        "rerank_model": settings.model,
+        "rerank_endpoint": settings.endpoint,
         "rerank_error": None,
+        "rerank_latency_ms": None,
         "candidate_count": len(docs_with_rank),
     }
-    if not docs_with_rank or not meta["rerank_enabled"]:
+    if not docs_with_rank or not settings.enabled:
         return docs_with_rank[:top_k], meta
 
-    payload = {
-        "model": RERANK_MODEL,
-        "query": query,
-        "documents": [doc.get("text", "") for doc in docs_with_rank],
-        "top_n": min(top_k, len(docs_with_rank)),
-        "return_documents": False,
-    }
-
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {RERANK_API_KEY}",
-    }
+    started = monotonic()
     try:
         meta["rerank_applied"] = True
-        response = requests.post(
-            meta["rerank_endpoint"],
-            headers=headers,
-            json=payload,
-            timeout=15,
+        items = reranker_client.rerank(
+            query,
+            [doc.get("text", "") for doc in docs_with_rank],
+            top_k,
         )
-        if response.status_code >= 400:
-            meta["rerank_error"] = f"HTTP {response.status_code}: {response.text}"
-            return docs_with_rank[:top_k], meta
-
-        items = response.json().get("results", [])
         reranked = []
         for item in items:
-            idx = item.get("index")
-            if isinstance(idx, int) and 0 <= idx < len(docs_with_rank):
-                doc = dict(docs_with_rank[idx])
-                score = item.get("relevance_score")
-                if score is not None:
-                    doc["rerank_score"] = score
+            if 0 <= item.index < len(docs_with_rank):
+                doc = dict(docs_with_rank[item.index])
+                doc["rerank_score"] = item.score
                 reranked.append(doc)
-
         if reranked:
             return reranked[:top_k], meta
-
         meta["rerank_error"] = "empty_rerank_results"
-        return docs_with_rank[:top_k], meta
-    except (requests.RequestException, json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
-        meta["rerank_error"] = str(e)
-        return docs_with_rank[:top_k], meta
+    except RerankerError as exc:
+        meta["rerank_error"] = str(exc)
+    finally:
+        meta["rerank_latency_ms"] = round((monotonic() - started) * 1000, 1)
+    return docs_with_rank[:top_k], meta
 
 
 def _get_stepback_model():
@@ -348,11 +328,13 @@ def retrieve_documents(query: str, top_k: int = RETRIEVAL_TOP_K) -> Dict[str, An
         return {
             "docs": [],
             "meta": {
-                "rerank_enabled": bool(RERANK_MODEL and RERANK_API_KEY and RERANK_BINDING_HOST),
+                "rerank_enabled": reranker_client.settings.enabled,
                 "rerank_applied": False,
+                "rerank_provider": reranker_client.settings.provider,
                 "rerank_model": RERANK_MODEL,
                 "rerank_endpoint": _get_rerank_endpoint(),
                 "rerank_error": reason,
+                "rerank_latency_ms": None,
                 "retrieval_mode": "failed",
                 "candidate_k": candidate_k,
                 "leaf_retrieve_level": LEAF_RETRIEVE_LEVEL,
