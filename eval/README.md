@@ -64,6 +64,9 @@ uv run python eval/eval_answer.py
 relevance、completeness、unsupported claims，以及 generation/judge/empty
 失败率。
 
+答案 baseline 保存到 `eval/baselines/rag_v1-answer.json`。原始运行
+结果同样写入 `eval/results/`。
+
 若任何 generation 或 Judge 请求失败，脚本拒绝更新答案 baseline。
 
 ## 4. LangSmith

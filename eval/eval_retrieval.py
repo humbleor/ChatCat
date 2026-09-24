@@ -69,17 +69,14 @@ def _load_gold_families(rows: list[dict]) -> dict[str, dict[str, str]]:
     from backend.vector.milvus_client import get_milvus_store
 
     wanted = {chunk_id for row in rows for chunk_id in row["gold_chunks"]}
-    records = get_milvus_store().query_all(
-        filter_expr="chunk_level == 3",
-        output_fields=["chunk_id", "parent_chunk_id", "root_chunk_id"],
-    )
+    records = get_milvus_store().get_chunks_by_ids(sorted(wanted))
     found = {
         record["chunk_id"]: {
             "parent_chunk_id": str(record.get("parent_chunk_id") or ""),
             "root_chunk_id": str(record.get("root_chunk_id") or ""),
         }
         for record in records
-        if record.get("chunk_id") in wanted
+        if record.get("chunk_id") in wanted and record.get("chunk_level") == 3
     }
     missing = sorted(wanted - found.keys())
     if missing:
@@ -384,6 +381,7 @@ def main() -> int:
         "rerank": {
             **rerank,
             "applied_rate": rerank["applied"] / rerank["seen"] if rerank["seen"] else 0.0,
+            "failure_rate": rerank["failed"] / rerank["seen"] if rerank["seen"] else 0.0,
         },
         "auto_merge": {
             **auto_merge,

@@ -1,0 +1,4 @@
+interface:
+  display_name: "ChatCat RAG Evaluation"
+  short_description: "Run and interpret ChatCat RAG quality evaluations"
+  default_prompt: "Use $chatcat-rag-eval to run the smallest appropriate RAG evaluation and report its metrics and gate status."

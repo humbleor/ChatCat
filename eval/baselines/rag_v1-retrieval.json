@@ -1,0 +1,2963 @@
+{
+  "schema_version": 1,
+  "kind": "rag_retrieval_evaluation",
+  "generated_at": "2026-09-24T14:01:00.585504+00:00",
+  "dataset": "/home/mspace/code/ChatCat/eval/rag_v1.jsonl",
+  "dataset_sha256": "ca53b93ca2740ae3f4c84bd53f83272d5d45e53749d582fd5a33c6784f8be030",
+  "config": {
+    "top_k": 8,
+    "ks": [
+      1,
+      3,
+      5,
+      8
+    ],
+    "retries": 1
+  },
+  "summary": {
+    "sample_count": 40,
+    "failed": 0,
+    "failure_rate": 0.0,
+    "empty_hits": 0,
+    "ks": [
+      1,
+      3,
+      5,
+      8
+    ],
+    "document_hit": {
+      "1": 0.825,
+      "3": 0.95,
+      "5": 0.975,
+      "8": 0.975
+    },
+    "evidence_hit": {
+      "1": 0.4,
+      "3": 0.55,
+      "5": 0.775,
+      "8": 0.825
+    },
+    "evidence_coverage": {
+      "1": 0.3770833333333333,
+      "3": 0.5333333333333334,
+      "5": 0.7458333333333333,
+      "8": 0.8166666666666667
+    },
+    "document_mrr": {
+      "1": 0.825,
+      "3": 0.8791666666666668,
+      "5": 0.8854166666666667,
+      "8": 0.8854166666666667
+    },
+    "latency_ms": {
+      "mean": 292.7818946749085,
+      "p50": 289.71375099990837,
+      "p95": 374.1433105488795
+    },
+    "rerank": {
+      "seen": 40,
+      "applied": 40,
+      "failed": 0,
+      "applied_rate": 1.0
+    },
+    "auto_merge": {
+      "seen": 40,
+      "applied": 16,
+      "replaced_total": 43,
+      "applied_rate": 0.4
+    },
+    "retrieval_mode": {
+      "hybrid": 40,
+      "dense_fallback": 0,
+      "failed": 0
+    },
+    "by_tag": {
+      "robotics": {
+        "count@1": 12,
+        "document_hit@1": 0.9166666666666666,
+        "evidence_hit@1": 0.5,
+        "count@3": 12,
+        "document_hit@3": 0.9166666666666666,
+        "evidence_hit@3": 0.75,
+        "count@5": 12,
+        "document_hit@5": 1.0,
+        "evidence_hit@5": 0.9166666666666666,
+        "count@8": 12,
+        "document_hit@8": 1.0,
+        "evidence_hit@8": 0.9166666666666666
+      },
+      "reasoning": {
+        "count@1": 7,
+        "document_hit@1": 0.8571428571428571,
+        "evidence_hit@1": 0.42857142857142855,
+        "count@3": 7,
+        "document_hit@3": 1.0,
+        "evidence_hit@3": 0.42857142857142855,
+        "count@5": 7,
+        "document_hit@5": 1.0,
+        "evidence_hit@5": 0.42857142857142855,
+        "count@8": 7,
+        "document_hit@8": 1.0,
+        "evidence_hit@8": 0.42857142857142855
+      },
+      "multi_hop": {
+        "count@1": 13,
+        "document_hit@1": 0.8461538461538461,
+        "evidence_hit@1": 0.46153846153846156,
+        "count@3": 13,
+        "document_hit@3": 1.0,
+        "evidence_hit@3": 0.5384615384615384,
+        "count@5": 13,
+        "document_hit@5": 1.0,
+        "evidence_hit@5": 0.6153846153846154,
+        "count@8": 13,
+        "document_hit@8": 1.0,
+        "evidence_hit@8": 0.6923076923076923
+      },
+      "quantitative": {
+        "count@1": 4,
+        "document_hit@1": 0.75,
+        "evidence_hit@1": 0.5,
+        "count@3": 4,
+        "document_hit@3": 1.0,
+        "evidence_hit@3": 0.5,
+        "count@5": 4,
+        "document_hit@5": 1.0,
+        "evidence_hit@5": 0.5,
+        "count@8": 4,
+        "document_hit@8": 1.0,
+        "evidence_hit@8": 0.5
+      },
+      "planning": {
+        "count@1": 6,
+        "document_hit@1": 0.6666666666666666,
+        "evidence_hit@1": 0.16666666666666666,
+        "count@3": 6,
+        "document_hit@3": 0.8333333333333334,
+        "evidence_hit@3": 0.16666666666666666,
+        "count@5": 6,
+        "document_hit@5": 0.8333333333333334,
+        "evidence_hit@5": 0.3333333333333333,
+        "count@8": 6,
+        "document_hit@8": 0.8333333333333334,
+        "evidence_hit@8": 0.6666666666666666
+      },
+      "algorithm": {
+        "count@1": 2,
+        "document_hit@1": 0.5,
+        "evidence_hit@1": 0.5,
+        "count@3": 2,
+        "document_hit@3": 1.0,
+        "evidence_hit@3": 0.5,
+        "count@5": 2,
+        "document_hit@5": 1.0,
+        "evidence_hit@5": 0.5,
+        "count@8": 2,
+        "document_hit@8": 1.0,
+        "evidence_hit@8": 0.5
+      },
+      "dynamics": {
+        "count@1": 1,
+        "document_hit@1": 0.0,
+        "evidence_hit@1": 0.0,
+        "count@3": 1,
+        "document_hit@3": 0.0,
+        "evidence_hit@3": 0.0,
+        "count@5": 1,
+        "document_hit@5": 0.0,
+        "evidence_hit@5": 0.0,
+        "count@8": 1,
+        "document_hit@8": 0.0,
+        "evidence_hit@8": 0.0
+      },
+      "process": {
+        "count@1": 3,
+        "document_hit@1": 0.6666666666666666,
+        "evidence_hit@1": 0.0,
+        "count@3": 3,
+        "document_hit@3": 0.6666666666666666,
+        "evidence_hit@3": 0.0,
+        "count@5": 3,
+        "document_hit@5": 0.6666666666666666,
+        "evidence_hit@5": 0.6666666666666666,
+        "count@8": 3,
+        "document_hit@8": 0.6666666666666666,
+        "evidence_hit@8": 0.6666666666666666
+      },
+      "multi_agent": {
+        "count@1": 9,
+        "document_hit@1": 1.0,
+        "evidence_hit@1": 0.2222222222222222,
+        "count@3": 9,
+        "document_hit@3": 1.0,
+        "evidence_hit@3": 0.3333333333333333,
+        "count@5": 9,
+        "document_hit@5": 1.0,
+        "evidence_hit@5": 0.5555555555555556,
+        "count@8": 9,
+        "document_hit@8": 1.0,
+        "evidence_hit@8": 0.7777777777777778
+      },
+      "system": {
+        "count@1": 11,
+        "document_hit@1": 0.9090909090909091,
+        "evidence_hit@1": 0.36363636363636365,
+        "count@3": 11,
+        "document_hit@3": 1.0,
+        "evidence_hit@3": 0.6363636363636364,
+        "count@5": 11,
+        "document_hit@5": 1.0,
+        "evidence_hit@5": 0.8181818181818182,
+        "count@8": 11,
+        "document_hit@8": 1.0,
+        "evidence_hit@8": 1.0
+      },
+      "deployment": {
+        "count@1": 1,
+        "document_hit@1": 1.0,
+        "evidence_hit@1": 0.0,
+        "count@3": 1,
+        "document_hit@3": 1.0,
+        "evidence_hit@3": 1.0,
+        "count@5": 1,
+        "document_hit@5": 1.0,
+        "evidence_hit@5": 1.0,
+        "count@8": 1,
+        "document_hit@8": 1.0,
+        "evidence_hit@8": 1.0
+      },
+      "factoid": {
+        "count@1": 14,
+        "document_hit@1": 0.7857142857142857,
+        "evidence_hit@1": 0.35714285714285715,
+        "count@3": 14,
+        "document_hit@3": 0.9285714285714286,
+        "evidence_hit@3": 0.5714285714285714,
+        "count@5": 14,
+        "document_hit@5": 1.0,
+        "evidence_hit@5": 0.9285714285714286,
+        "count@8": 14,
+        "document_hit@8": 1.0,
+        "evidence_hit@8": 0.9285714285714286
+      },
+      "exploration": {
+        "count@1": 1,
+        "document_hit@1": 1.0,
+        "evidence_hit@1": 1.0,
+        "count@3": 1,
+        "document_hit@3": 1.0,
+        "evidence_hit@3": 1.0,
+        "count@5": 1,
+        "document_hit@5": 1.0,
+        "evidence_hit@5": 1.0,
+        "count@8": 1,
+        "document_hit@8": 1.0,
+        "evidence_hit@8": 1.0
+      },
+      "lidar": {
+        "count@1": 1,
+        "document_hit@1": 1.0,
+        "evidence_hit@1": 1.0,
+        "count@3": 1,
+        "document_hit@3": 1.0,
+        "evidence_hit@3": 1.0,
+        "count@5": 1,
+        "document_hit@5": 1.0,
+        "evidence_hit@5": 1.0,
+        "count@8": 1,
+        "document_hit@8": 1.0,
+        "evidence_hit@8": 1.0
+      },
+      "vision_language": {
+        "count@1": 1,
+        "document_hit@1": 1.0,
+        "evidence_hit@1": 0.0,
+        "count@3": 1,
+        "document_hit@3": 1.0,
+        "evidence_hit@3": 0.0,
+        "count@5": 1,
+        "document_hit@5": 1.0,
+        "evidence_hit@5": 0.0,
+        "count@8": 1,
+        "document_hit@8": 1.0,
+        "evidence_hit@8": 0.0
+      },
+      "slam": {
+        "count@1": 7,
+        "document_hit@1": 0.7142857142857143,
+        "evidence_hit@1": 0.42857142857142855,
+        "count@3": 7,
+        "document_hit@3": 1.0,
+        "evidence_hit@3": 0.5714285714285714,
+        "count@5": 7,
+        "document_hit@5": 1.0,
+        "evidence_hit@5": 0.8571428571428571,
+        "count@8": 7,
+        "document_hit@8": 1.0,
+        "evidence_hit@8": 0.8571428571428571
+      },
+      "sensor_fusion": {
+        "count@1": 3,
+        "document_hit@1": 0.6666666666666666,
+        "evidence_hit@1": 0.3333333333333333,
+        "count@3": 3,
+        "document_hit@3": 1.0,
+        "evidence_hit@3": 0.6666666666666666,
+        "count@5": 3,
+        "document_hit@5": 1.0,
+        "evidence_hit@5": 1.0,
+        "count@8": 3,
+        "document_hit@8": 1.0,
+        "evidence_hit@8": 1.0
+      },
+      "data_structure": {
+        "count@1": 2,
+        "document_hit@1": 0.5,
+        "evidence_hit@1": 0.5,
+        "count@3": 2,
+        "document_hit@3": 1.0,
+        "evidence_hit@3": 0.5,
+        "count@5": 2,
+        "document_hit@5": 1.0,
+        "evidence_hit@5": 0.5,
+        "count@8": 2,
+        "document_hit@8": 1.0,
+        "evidence_hit@8": 0.5
+      },
+      "english": {
+        "count@1": 12,
+        "document_hit@1": 0.75,
+        "evidence_hit@1": 0.3333333333333333,
+        "count@3": 12,
+        "document_hit@3": 0.9166666666666666,
+        "evidence_hit@3": 0.6666666666666666,
+        "count@5": 12,
+        "document_hit@5": 1.0,
+        "evidence_hit@5": 0.9166666666666666,
+        "count@8": 12,
+        "document_hit@8": 1.0,
+        "evidence_hit@8": 0.9166666666666666
+      },
+      "definition": {
+        "count@1": 1,
+        "document_hit@1": 1.0,
+        "evidence_hit@1": 1.0,
+        "count@3": 1,
+        "document_hit@3": 1.0,
+        "evidence_hit@3": 1.0,
+        "count@5": 1,
+        "document_hit@5": 1.0,
+        "evidence_hit@5": 1.0,
+        "count@8": 1,
+        "document_hit@8": 1.0,
+        "evidence_hit@8": 1.0
+      },
+      "manual": {
+        "count@1": 5,
+        "document_hit@1": 1.0,
+        "evidence_hit@1": 0.6,
+        "count@3": 5,
+        "document_hit@3": 1.0,
+        "evidence_hit@3": 0.6,
+        "count@5": 5,
+        "document_hit@5": 1.0,
+        "evidence_hit@5": 1.0,
+        "count@8": 5,
+        "document_hit@8": 1.0,
+        "evidence_hit@8": 1.0
+      },
+      "remote_control": {
+        "count@1": 3,
+        "document_hit@1": 1.0,
+        "evidence_hit@1": 0.3333333333333333,
+        "count@3": 3,
+        "document_hit@3": 1.0,
+        "evidence_hit@3": 0.3333333333333333,
+        "count@5": 3,
+        "document_hit@5": 1.0,
+        "evidence_hit@5": 1.0,
+        "count@8": 3,
+        "document_hit@8": 1.0,
+        "evidence_hit@8": 1.0
+      },
+      "hardware": {
+        "count@1": 2,
+        "document_hit@1": 1.0,
+        "evidence_hit@1": 1.0,
+        "count@3": 2,
+        "document_hit@3": 1.0,
+        "evidence_hit@3": 1.0,
+        "count@5": 2,
+        "document_hit@5": 1.0,
+        "evidence_hit@5": 1.0,
+        "count@8": 2,
+        "document_hit@8": 1.0,
+        "evidence_hit@8": 1.0
+      },
+      "navigation": {
+        "count@1": 3,
+        "document_hit@1": 1.0,
+        "evidence_hit@1": 0.3333333333333333,
+        "count@3": 3,
+        "document_hit@3": 1.0,
+        "evidence_hit@3": 0.3333333333333333,
+        "count@5": 3,
+        "document_hit@5": 1.0,
+        "evidence_hit@5": 0.6666666666666666,
+        "count@8": 3,
+        "document_hit@8": 1.0,
+        "evidence_hit@8": 0.6666666666666666
+      },
+      "reinforcement_learning": {
+        "count@1": 3,
+        "document_hit@1": 1.0,
+        "evidence_hit@1": 0.3333333333333333,
+        "count@3": 3,
+        "document_hit@3": 1.0,
+        "evidence_hit@3": 0.3333333333333333,
+        "count@5": 3,
+        "document_hit@5": 1.0,
+        "evidence_hit@5": 0.6666666666666666,
+        "count@8": 3,
+        "document_hit@8": 1.0,
+        "evidence_hit@8": 0.6666666666666666
+      },
+      "perception": {
+        "count@1": 2,
+        "document_hit@1": 1.0,
+        "evidence_hit@1": 1.0,
+        "count@3": 2,
+        "document_hit@3": 1.0,
+        "evidence_hit@3": 1.0,
+        "count@5": 2,
+        "document_hit@5": 1.0,
+        "evidence_hit@5": 1.0,
+        "count@8": 2,
+        "document_hit@8": 1.0,
+        "evidence_hit@8": 1.0
+      },
+      "transformer": {
+        "count@1": 1,
+        "document_hit@1": 1.0,
+        "evidence_hit@1": 0.0,
+        "count@3": 1,
+        "document_hit@3": 1.0,
+        "evidence_hit@3": 0.0,
+        "count@5": 1,
+        "document_hit@5": 1.0,
+        "evidence_hit@5": 0.0,
+        "count@8": 1,
+        "document_hit@8": 1.0,
+        "evidence_hit@8": 0.0
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "q001",
+      "question": "可变形陆空机器人为什么同时需要飞行和地面行驶能力？",
+      "tags": [
+        "robotics",
+        "reasoning",
+        "multi_hop"
+      ],
+      "status": "ok",
+      "latency_ms": 324.6,
+      "document_rank": 1,
+      "evidence_rank": 1,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 0.6666666666666666
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 0.6666666666666666
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 0.6666666666666666
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        }
+      },
+      "returned_chunk_ids": [
+        "1bb774ebc5eb1ca361cb51a4b72bcec9eeeb3fbe36ce9bc87cea22ce9cfe4269::p0::l3::11",
+        "1bb774ebc5eb1ca361cb51a4b72bcec9eeeb3fbe36ce9bc87cea22ce9cfe4269::p0::l3::1",
+        "1bb774ebc5eb1ca361cb51a4b72bcec9eeeb3fbe36ce9bc87cea22ce9cfe4269::p0::l3::32",
+        "1bb774ebc5eb1ca361cb51a4b72bcec9eeeb3fbe36ce9bc87cea22ce9cfe4269::p0::l3::15",
+        "1bb774ebc5eb1ca361cb51a4b72bcec9eeeb3fbe36ce9bc87cea22ce9cfe4269::p0::l3::13",
+        "1bb774ebc5eb1ca361cb51a4b72bcec9eeeb3fbe36ce9bc87cea22ce9cfe4269::p0::l3::23",
+        "1bb774ebc5eb1ca361cb51a4b72bcec9eeeb3fbe36ce9bc87cea22ce9cfe4269::p0::l3::30",
+        "1bb774ebc5eb1ca361cb51a4b72bcec9eeeb3fbe36ce9bc87cea22ce9cfe4269::p8::l3::19"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 210.6,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": false,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 0,
+        "auto_merge_steps": 0
+      }
+    },
+    {
+      "id": "q002",
+      "question": "Coupled Modeling and Fusion Control for a Multi-modal Deformable Land-air Robot论文的耦合动力学模型包含哪些部件，控制器取得了哪些量化效果？",
+      "tags": [
+        "robotics",
+        "quantitative",
+        "multi_hop"
+      ],
+      "status": "ok",
+      "latency_ms": 316.7,
+      "document_rank": 1,
+      "evidence_rank": 1,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 0.75
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        }
+      },
+      "returned_chunk_ids": [
+        "1bb774ebc5eb1ca361cb51a4b72bcec9eeeb3fbe36ce9bc87cea22ce9cfe4269::p0::l3::0",
+        "1bb774ebc5eb1ca361cb51a4b72bcec9eeeb3fbe36ce9bc87cea22ce9cfe4269::p1::l3::3",
+        "1bb774ebc5eb1ca361cb51a4b72bcec9eeeb3fbe36ce9bc87cea22ce9cfe4269::p0::l3::8",
+        "1bb774ebc5eb1ca361cb51a4b72bcec9eeeb3fbe36ce9bc87cea22ce9cfe4269::p8::l2::9",
+        "1bb774ebc5eb1ca361cb51a4b72bcec9eeeb3fbe36ce9bc87cea22ce9cfe4269::p1::l3::5",
+        "1bb774ebc5eb1ca361cb51a4b72bcec9eeeb3fbe36ce9bc87cea22ce9cfe4269::p1::l3::4",
+        "1bb774ebc5eb1ca361cb51a4b72bcec9eeeb3fbe36ce9bc87cea22ce9cfe4269::p9::l3::1"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 161.3,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": true,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 2,
+        "auto_merge_steps": 1
+      }
+    },
+    {
+      "id": "q003",
+      "question": "EGO-Planner 为什么可以不构建 ESDF，碰撞代价是怎样得到的？",
+      "tags": [
+        "planning",
+        "algorithm",
+        "reasoning",
+        "multi_hop"
+      ],
+      "status": "ok",
+      "latency_ms": 247.9,
+      "document_rank": 3,
+      "evidence_rank": null,
+      "metrics": {
+        "1": {
+          "document_hit": false,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        }
+      },
+      "returned_chunk_ids": [
+        "202befda113e5b79358abb9413963910a0ed36fd1e64e0a6b92846a0eacd227e::p0::l3::17",
+        "202befda113e5b79358abb9413963910a0ed36fd1e64e0a6b92846a0eacd227e::p1::l3::22",
+        "6d35a1a2d06e6560c5ab4a6d47dffa7818386a6ba0f41e0999cb009d3b3e795e::p5::l3::26",
+        "6d35a1a2d06e6560c5ab4a6d47dffa7818386a6ba0f41e0999cb009d3b3e795e::p5::l3::23",
+        "6d35a1a2d06e6560c5ab4a6d47dffa7818386a6ba0f41e0999cb009d3b3e795e::p1::l3::0",
+        "202befda113e5b79358abb9413963910a0ed36fd1e64e0a6b92846a0eacd227e::p0::l3::23",
+        "6d35a1a2d06e6560c5ab4a6d47dffa7818386a6ba0f41e0999cb009d3b3e795e::p5::l3::0",
+        "6d35a1a2d06e6560c5ab4a6d47dffa7818386a6ba0f41e0999cb009d3b3e795e::p2::l3::4"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 148.4,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": false,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 0,
+        "auto_merge_steps": 0
+      }
+    },
+    {
+      "id": "q004",
+      "question": "EGO-Planner 如何处理轨迹不满足动力学可行性的问题？",
+      "tags": [
+        "planning",
+        "dynamics",
+        "process"
+      ],
+      "status": "ok",
+      "latency_ms": 338.8,
+      "document_rank": null,
+      "evidence_rank": null,
+      "metrics": {
+        "1": {
+          "document_hit": false,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "3": {
+          "document_hit": false,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "5": {
+          "document_hit": false,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "8": {
+          "document_hit": false,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        }
+      },
+      "returned_chunk_ids": [
+        "202befda113e5b79358abb9413963910a0ed36fd1e64e0a6b92846a0eacd227e::p1::l3::6",
+        "202befda113e5b79358abb9413963910a0ed36fd1e64e0a6b92846a0eacd227e::p1::l3::22",
+        "1d225d5657eb6adc324d83023e1d73bf387486ac3802816853b96a864332c12e::p4::l3::28",
+        "202befda113e5b79358abb9413963910a0ed36fd1e64e0a6b92846a0eacd227e::p2::l3::8",
+        "202befda113e5b79358abb9413963910a0ed36fd1e64e0a6b92846a0eacd227e::p1::l3::7",
+        "d05a51b7fa4b326b260db563abfa7fda5f2fc5e92f6af53d3b7c90df511238d0::p6::l3::10",
+        "202befda113e5b79358abb9413963910a0ed36fd1e64e0a6b92846a0eacd227e::p1::l3::12",
+        "59abf4563f80fbf8f193ca21ed8cff78ad6850457a7728d92c6078d3b6644fef::p1::l3::2"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 128.2,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": false,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 0,
+        "auto_merge_steps": 0
+      }
+    },
+    {
+      "id": "q005",
+      "question": "EGO-Swarm 如何在未知、障碍密集环境中实现去中心化避碰和轨迹生成？",
+      "tags": [
+        "multi_agent",
+        "planning",
+        "system",
+        "multi_hop"
+      ],
+      "status": "ok",
+      "latency_ms": 397.6,
+      "document_rank": 1,
+      "evidence_rank": 7,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        }
+      },
+      "returned_chunk_ids": [
+        "202befda113e5b79358abb9413963910a0ed36fd1e64e0a6b92846a0eacd227e::p0::l3::17",
+        "202befda113e5b79358abb9413963910a0ed36fd1e64e0a6b92846a0eacd227e::p0::l3::23",
+        "038092f76561483c9b51786572f438f8::p1::l3::20",
+        "202befda113e5b79358abb9413963910a0ed36fd1e64e0a6b92846a0eacd227e::p1::l3::14",
+        "202befda113e5b79358abb9413963910a0ed36fd1e64e0a6b92846a0eacd227e::p1::l3::13",
+        "202befda113e5b79358abb9413963910a0ed36fd1e64e0a6b92846a0eacd227e::p0::l3::15",
+        "202befda113e5b79358abb9413963910a0ed36fd1e64e0a6b92846a0eacd227e::p0::l3::0",
+        "41169c4f0d364df1bc168fa7a0439d41::p15::l3::5"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 125.0,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": false,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 0,
+        "auto_merge_steps": 0
+      }
+    },
+    {
+      "id": "q006",
+      "question": "EGO-Swarm 指出多架四旋翼在未知环境部署时有哪些主要困难？",
+      "tags": [
+        "multi_agent",
+        "deployment",
+        "factoid",
+        "multi_hop"
+      ],
+      "status": "ok",
+      "latency_ms": 341.3,
+      "document_rank": 1,
+      "evidence_rank": 3,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        }
+      },
+      "returned_chunk_ids": [
+        "202befda113e5b79358abb9413963910a0ed36fd1e64e0a6b92846a0eacd227e::p0::l3::15",
+        "202befda113e5b79358abb9413963910a0ed36fd1e64e0a6b92846a0eacd227e::p0::l3::0",
+        "202befda113e5b79358abb9413963910a0ed36fd1e64e0a6b92846a0eacd227e::p0::l3::9",
+        "202befda113e5b79358abb9413963910a0ed36fd1e64e0a6b92846a0eacd227e::p0::l3::10",
+        "50c1ceff6f9b7a4a7e4139b782f53ba36332b0f016b4b708b3f49654e189b870::p0::l3::16",
+        "8cc4192e595844458ba7a473b11586a3::p1::l3::8",
+        "f2f6083d21ed63ed46e94fbab77b5df25a8a1e4a35063ded6e580e1106a54196::p3::l3::3",
+        "202befda113e5b79358abb9413963910a0ed36fd1e64e0a6b92846a0eacd227e::p0::l3::17"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 114.3,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": false,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 0,
+        "auto_merge_steps": 0
+      }
+    },
+    {
+      "id": "q007",
+      "question": "EPIC 为什么不依赖全局占据栅格地图，它用什么表示来引导探索？",
+      "tags": [
+        "exploration",
+        "lidar",
+        "reasoning",
+        "multi_hop"
+      ],
+      "status": "ok",
+      "latency_ms": 339.4,
+      "document_rank": 1,
+      "evidence_rank": 1,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 0.8333333333333334
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 0.8333333333333334
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 0.8333333333333334
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 0.8333333333333334
+        }
+      },
+      "returned_chunk_ids": [
+        "802b7df525bf8e63efa8a964f52af064d02e1631ba6861c2abb5ccc9d46a75cb::p0::l3::12",
+        "802b7df525bf8e63efa8a964f52af064d02e1631ba6861c2abb5ccc9d46a75cb::p0::l2::4",
+        "802b7df525bf8e63efa8a964f52af064d02e1631ba6861c2abb5ccc9d46a75cb::p0::l3::13",
+        "802b7df525bf8e63efa8a964f52af064d02e1631ba6861c2abb5ccc9d46a75cb::p6::l3::26",
+        "802b7df525bf8e63efa8a964f52af064d02e1631ba6861c2abb5ccc9d46a75cb::p6::l3::27",
+        "802b7df525bf8e63efa8a964f52af064d02e1631ba6861c2abb5ccc9d46a75cb::p1::l2::0"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 130.5,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": true,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 4,
+        "auto_merge_steps": 1
+      }
+    },
+    {
+      "id": "q008",
+      "question": "D-VLC 要解决传统异构多机器人系统的什么局限，实验表现如何？",
+      "tags": [
+        "multi_agent",
+        "vision_language",
+        "reasoning",
+        "quantitative"
+      ],
+      "status": "ok",
+      "latency_ms": 320.1,
+      "document_rank": 1,
+      "evidence_rank": null,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        }
+      },
+      "returned_chunk_ids": [
+        "55af561ddd6c41038975808d55f437c3::p1::l3::25",
+        "55af561ddd6c41038975808d55f437c3::p5::l3::31",
+        "55af561ddd6c41038975808d55f437c3::p0::l3::0",
+        "55af561ddd6c41038975808d55f437c3::p1::l3::29",
+        "55af561ddd6c41038975808d55f437c3::p0::l3::31",
+        "55af561ddd6c41038975808d55f437c3::p7::l3::0",
+        "55af561ddd6c41038975808d55f437c3::p0::l3::30",
+        "55af561ddd6c41038975808d55f437c3::p2::l3::12"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 124.1,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": false,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 0,
+        "auto_merge_steps": 0
+      }
+    },
+    {
+      "id": "q009",
+      "question": "FAST-LIVO2 的定位建图目标是什么，它对哪些退化情况具有鲁棒性？",
+      "tags": [
+        "slam",
+        "sensor_fusion",
+        "system"
+      ],
+      "status": "ok",
+      "latency_ms": 380.5,
+      "document_rank": 1,
+      "evidence_rank": 1,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        }
+      },
+      "returned_chunk_ids": [
+        "8a9e5643ff99e4d9b735507ddd80fddb6af38401f635d72a0bf017eda57c5695::p18::l3::6",
+        "8a9e5643ff99e4d9b735507ddd80fddb6af38401f635d72a0bf017eda57c5695::p26::l3::1",
+        "8a9e5643ff99e4d9b735507ddd80fddb6af38401f635d72a0bf017eda57c5695::p18::l3::5",
+        "8a9e5643ff99e4d9b735507ddd80fddb6af38401f635d72a0bf017eda57c5695::p18::l3::7",
+        "8a9e5643ff99e4d9b735507ddd80fddb6af38401f635d72a0bf017eda57c5695::p16::l3::31",
+        "8a9e5643ff99e4d9b735507ddd80fddb6af38401f635d72a0bf017eda57c5695::p0::l3::5",
+        "8a9e5643ff99e4d9b735507ddd80fddb6af38401f635d72a0bf017eda57c5695::p2::l3::1",
+        "8a9e5643ff99e4d9b735507ddd80fddb6af38401f635d72a0bf017eda57c5695::p1::l3::0"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 150.3,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": false,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 0,
+        "auto_merge_steps": 0
+      }
+    },
+    {
+      "id": "q010",
+      "question": "ikd-Tree 中 invalidnum 表示什么，整棵子树被删除时它与 treesize 有什么关系？",
+      "tags": [
+        "slam",
+        "data_structure",
+        "factoid"
+      ],
+      "status": "ok",
+      "latency_ms": 373.1,
+      "document_rank": 1,
+      "evidence_rank": 1,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        }
+      },
+      "returned_chunk_ids": [
+        "6b9113d89ab949cd99fa659f89d054494bbe0b851fd714203a45242c9abd6cd5::p7::l3::37",
+        "8d7bab1226c4f818b7a9566d9d707f86146ec3c2e1217c640229a9710585136d::p1::l3::29",
+        "8d7bab1226c4f818b7a9566d9d707f86146ec3c2e1217c640229a9710585136d::p2::l3::14",
+        "8d7bab1226c4f818b7a9566d9d707f86146ec3c2e1217c640229a9710585136d::p3::l3::19",
+        "6b9113d89ab949cd99fa659f89d054494bbe0b851fd714203a45242c9abd6cd5::p7::l3::36",
+        "6b9113d89ab949cd99fa659f89d054494bbe0b851fd714203a45242c9abd6cd5::p8::l2::4",
+        "6b9113d89ab949cd99fa659f89d054494bbe0b851fd714203a45242c9abd6cd5::p7::l3::3"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 154.4,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": true,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 2,
+        "auto_merge_steps": 1
+      }
+    },
+    {
+      "id": "q011",
+      "question": "什么是FAST-LIO2？它有什么特点？",
+      "tags": [
+        "robotics",
+        "english",
+        "system"
+      ],
+      "status": "ok",
+      "latency_ms": 264.4,
+      "document_rank": 1,
+      "evidence_rank": 2,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        }
+      },
+      "returned_chunk_ids": [
+        "6b9113d89ab949cd99fa659f89d054494bbe0b851fd714203a45242c9abd6cd5::p18::l3::16",
+        "6b9113d89ab949cd99fa659f89d054494bbe0b851fd714203a45242c9abd6cd5::p0::l3::1",
+        "6b9113d89ab949cd99fa659f89d054494bbe0b851fd714203a45242c9abd6cd5::p13::l3::23",
+        "6b9113d89ab949cd99fa659f89d054494bbe0b851fd714203a45242c9abd6cd5::p15::l3::7",
+        "6b9113d89ab949cd99fa659f89d054494bbe0b851fd714203a45242c9abd6cd5::p0::l3::9",
+        "6b9113d89ab949cd99fa659f89d054494bbe0b851fd714203a45242c9abd6cd5::p16::l3::11",
+        "6b9113d89ab949cd99fa659f89d054494bbe0b851fd714203a45242c9abd6cd5::p18::l3::8",
+        "6b9113d89ab949cd99fa659f89d054494bbe0b851fd714203a45242c9abd6cd5::p15::l3::6"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 144.4,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": false,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 0,
+        "auto_merge_steps": 0
+      }
+    },
+    {
+      "id": "q012",
+      "question": "FAST-LIO2 论文中哪些作者被标注为 IEEE Graduate Student Member？",
+      "tags": [
+        "robotics",
+        "english",
+        "factoid"
+      ],
+      "status": "ok",
+      "latency_ms": 318.9,
+      "document_rank": 1,
+      "evidence_rank": 1,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        }
+      },
+      "returned_chunk_ids": [
+        "6b9113d89ab949cd99fa659f89d054494bbe0b851fd714203a45242c9abd6cd5::p0::l2::0",
+        "8cc4192e595844458ba7a473b11586a3::p0::l3::1",
+        "1796f6983d8e6f19165ab02f28a13e6e345a34c630b94609e3aed22bf7aac9a6::p0::l3::0",
+        "41169c4f0d364df1bc168fa7a0439d41::p23::l3::1",
+        "1bb774ebc5eb1ca361cb51a4b72bcec9eeeb3fbe36ce9bc87cea22ce9cfe4269::p0::l3::0",
+        "55af561ddd6c41038975808d55f437c3::p8::l3::3",
+        "802b7df525bf8e63efa8a964f52af064d02e1631ba6861c2abb5ccc9d46a75cb::p7::l3::44"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 131.6,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": true,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 2,
+        "auto_merge_steps": 1
+      }
+    },
+    {
+      "id": "q013",
+      "question": "Coupled Modeling and Fusion 论文研究的机器人是什么？",
+      "tags": [
+        "robotics",
+        "english",
+        "system"
+      ],
+      "status": "ok",
+      "latency_ms": 303.4,
+      "document_rank": 1,
+      "evidence_rank": 1,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        }
+      },
+      "returned_chunk_ids": [
+        "1bb774ebc5eb1ca361cb51a4b72bcec9eeeb3fbe36ce9bc87cea22ce9cfe4269::p0::l3::0",
+        "59abf4563f80fbf8f193ca21ed8cff78ad6850457a7728d92c6078d3b6644fef::p7::l3::28",
+        "59abf4563f80fbf8f193ca21ed8cff78ad6850457a7728d92c6078d3b6644fef::p7::l3::27",
+        "1bb774ebc5eb1ca361cb51a4b72bcec9eeeb3fbe36ce9bc87cea22ce9cfe4269::p1::l3::3",
+        "1bb774ebc5eb1ca361cb51a4b72bcec9eeeb3fbe36ce9bc87cea22ce9cfe4269::p1::l3::5",
+        "1bb774ebc5eb1ca361cb51a4b72bcec9eeeb3fbe36ce9bc87cea22ce9cfe4269::p1::l3::4",
+        "1bb774ebc5eb1ca361cb51a4b72bcec9eeeb3fbe36ce9bc87cea22ce9cfe4269::p9::l3::1",
+        "1bb774ebc5eb1ca361cb51a4b72bcec9eeeb3fbe36ce9bc87cea22ce9cfe4269::p0::l3::8"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 112.8,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": false,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 0,
+        "auto_merge_steps": 0
+      }
+    },
+    {
+      "id": "q014",
+      "question": "HE-Nav 论文的核心贡献是什么？",
+      "tags": [
+        "robotics",
+        "english",
+        "system"
+      ],
+      "status": "ok",
+      "latency_ms": 248.4,
+      "document_rank": 1,
+      "evidence_rank": 3,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        }
+      },
+      "returned_chunk_ids": [
+        "59abf4563f80fbf8f193ca21ed8cff78ad6850457a7728d92c6078d3b6644fef::p1::l3::21",
+        "59abf4563f80fbf8f193ca21ed8cff78ad6850457a7728d92c6078d3b6644fef::p4::l3::32",
+        "59abf4563f80fbf8f193ca21ed8cff78ad6850457a7728d92c6078d3b6644fef::p0::l3::4",
+        "59abf4563f80fbf8f193ca21ed8cff78ad6850457a7728d92c6078d3b6644fef::p4::l3::31",
+        "59abf4563f80fbf8f193ca21ed8cff78ad6850457a7728d92c6078d3b6644fef::p0::l3::0",
+        "59abf4563f80fbf8f193ca21ed8cff78ad6850457a7728d92c6078d3b6644fef::p2::l3::0",
+        "59abf4563f80fbf8f193ca21ed8cff78ad6850457a7728d92c6078d3b6644fef::p7::l2::3"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 109.3,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": true,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 2,
+        "auto_merge_steps": 1
+      }
+    },
+    {
+      "id": "q015",
+      "question": "《Forest in situ observations using unmanned aerial vehicle as an alternative of terrestrial measurements》论文中，地面激光扫描（TLS）数据在森林测量中有什么优势？",
+      "tags": [
+        "robotics",
+        "english",
+        "definition"
+      ],
+      "status": "ok",
+      "latency_ms": 302.4,
+      "document_rank": 1,
+      "evidence_rank": 1,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        }
+      },
+      "returned_chunk_ids": [
+        "e24e2f53b7602eefe04b415168055e2d2107c8d671f634812d6dda2d22ed8450::p0::l3::2",
+        "8c02c337e2b426579752b95b3297ba71cbcd71f6930531ff1a4f204f662dbac0::p1::l3::27",
+        "5c37cccc6dadc1471e24ff8bfd2d7d3dc2c86b868eb1fcb076f27da6dd9e1ddc::p0::l3::27",
+        "8cefde34fde99d6f9a1742333e80d0195c8d085c02d0fda536768361f80f32f1::p1::l3::10",
+        "8cefde34fde99d6f9a1742333e80d0195c8d085c02d0fda536768361f80f32f1::p1::l3::9",
+        "f8d72c6371835ba766712df6afb78dfdd0f6b0ce8d151fc565fd6fb42e28081e::p0::l3::35",
+        "a189e34349b5cec253cbb5024284e1430d44a854a53e647bfd197d41f2101f95::p1::l2::1"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 128.8,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": true,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 2,
+        "auto_merge_steps": 1
+      }
+    },
+    {
+      "id": "q016",
+      "question": "In-situ measurements from mobile platforms: An emerging approach to address the old challenges associated with forest inventories 论文的研究机构是哪里？",
+      "tags": [
+        "robotics",
+        "english",
+        "factoid"
+      ],
+      "status": "ok",
+      "latency_ms": 318.7,
+      "document_rank": 4,
+      "evidence_rank": 4,
+      "metrics": {
+        "1": {
+          "document_hit": false,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "3": {
+          "document_hit": false,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        }
+      },
+      "returned_chunk_ids": [
+        "8c02c337e2b426579752b95b3297ba71cbcd71f6930531ff1a4f204f662dbac0::p41::l3::40",
+        "e24e2f53b7602eefe04b415168055e2d2107c8d671f634812d6dda2d22ed8450::p14::l3::41",
+        "855993dd85efe288a1ffc0f55165a8d466db14b555effda6fcd76e306195e96f::p13::l3::39",
+        "ba60e9d26533198bb0694bfb67ee7501dc2c6e53d825da321622c8cbab202993::p0::l3::0",
+        "ba60e9d26533198bb0694bfb67ee7501dc2c6e53d825da321622c8cbab202993::p10::l3::1",
+        "f8d72c6371835ba766712df6afb78dfdd0f6b0ce8d151fc565fd6fb42e28081e::p19::l3::54",
+        "ba60e9d26533198bb0694bfb67ee7501dc2c6e53d825da321622c8cbab202993::p0::l3::9",
+        "f8d72c6371835ba766712df6afb78dfdd0f6b0ce8d151fc565fd6fb42e28081e::p19::l3::53"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 126.2,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": false,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 0,
+        "auto_merge_steps": 0
+      }
+    },
+    {
+      "id": "q017",
+      "question": "Automatic Stem Mapping 论文发表于哪一年、哪本期刊？",
+      "tags": [
+        "english",
+        "factoid"
+      ],
+      "status": "ok",
+      "latency_ms": 336.6,
+      "document_rank": 2,
+      "evidence_rank": 2,
+      "metrics": {
+        "1": {
+          "document_hit": false,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        }
+      },
+      "returned_chunk_ids": [
+        "5c37cccc6dadc1471e24ff8bfd2d7d3dc2c86b868eb1fcb076f27da6dd9e1ddc::p0::l3::0",
+        "8cefde34fde99d6f9a1742333e80d0195c8d085c02d0fda536768361f80f32f1::p0::l3::0",
+        "8c02c337e2b426579752b95b3297ba71cbcd71f6930531ff1a4f204f662dbac0::p41::l3::32",
+        "8cefde34fde99d6f9a1742333e80d0195c8d085c02d0fda536768361f80f32f1::p19::l3::13",
+        "908e21e3dcea1eb228c817f9395b8e97d45660ceaee4336c6d9d7fd9ecedc399::p13::l3::53",
+        "8c02c337e2b426579752b95b3297ba71cbcd71f6930531ff1a4f204f662dbac0::p41::l3::33",
+        "a189e34349b5cec253cbb5024284e1430d44a854a53e647bfd197d41f2101f95::p8::l3::52",
+        "8c02c337e2b426579752b95b3297ba71cbcd71f6930531ff1a4f204f662dbac0::p42::l3::12"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 126.7,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": false,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 0,
+        "auto_merge_steps": 0
+      }
+    },
+    {
+      "id": "q018",
+      "question": "乐迪AT9S 出厂默认多少通道？",
+      "tags": [
+        "manual",
+        "remote_control",
+        "factoid"
+      ],
+      "status": "ok",
+      "latency_ms": 364.8,
+      "document_rank": 1,
+      "evidence_rank": 4,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        }
+      },
+      "returned_chunk_ids": [
+        "04986ac73355395292b79262f6395e151bf09eef64fe7b76c40786d95e77f1e5::p8::l2::0",
+        "04986ac73355395292b79262f6395e151bf09eef64fe7b76c40786d95e77f1e5::p8::l3::3",
+        "04986ac73355395292b79262f6395e151bf09eef64fe7b76c40786d95e77f1e5::p84::l3::1",
+        "04986ac73355395292b79262f6395e151bf09eef64fe7b76c40786d95e77f1e5::p1::l3::0",
+        "04986ac73355395292b79262f6395e151bf09eef64fe7b76c40786d95e77f1e5::p0::l3::0",
+        "04986ac73355395292b79262f6395e151bf09eef64fe7b76c40786d95e77f1e5::p5::l3::1"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 168.4,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": true,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 3,
+        "auto_merge_steps": 1
+      }
+    },
+    {
+      "id": "q019",
+      "question": "乐迪售后服务条款对购买一年内质量问题的运费如何规定？",
+      "tags": [
+        "manual",
+        "remote_control",
+        "factoid"
+      ],
+      "status": "ok",
+      "latency_ms": 326.5,
+      "document_rank": 1,
+      "evidence_rank": 1,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        }
+      },
+      "returned_chunk_ids": [
+        "04986ac73355395292b79262f6395e151bf09eef64fe7b76c40786d95e77f1e5::p1::l1::0",
+        "04986ac73355395292b79262f6395e151bf09eef64fe7b76c40786d95e77f1e5::p1::l3::7",
+        "04986ac73355395292b79262f6395e151bf09eef64fe7b76c40786d95e77f1e5::p84::l3::2"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 178.2,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": true,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 8,
+        "auto_merge_steps": 2
+      }
+    },
+    {
+      "id": "q020",
+      "question": "Pixhawk 6C 的处理器型号和频率是什么？",
+      "tags": [
+        "manual",
+        "hardware",
+        "factoid"
+      ],
+      "status": "ok",
+      "latency_ms": 281.5,
+      "document_rank": 1,
+      "evidence_rank": 1,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        }
+      },
+      "returned_chunk_ids": [
+        "063631fa5eeabd00d7f1323eae67a1f0d7b597e015ab1993b1f113ee21cff2ae::p0::l2::0",
+        "063631fa5eeabd00d7f1323eae67a1f0d7b597e015ab1993b1f113ee21cff2ae::p0::l3::3",
+        "063631fa5eeabd00d7f1323eae67a1f0d7b597e015ab1993b1f113ee21cff2ae::p5::l3::0",
+        "50c1ceff6f9b7a4a7e4139b782f53ba36332b0f016b4b708b3f49654e189b870::p23::l3::21",
+        "8cc4192e595844458ba7a473b11586a3::p15::l3::5",
+        "8cc4192e595844458ba7a473b11586a3::p15::l3::6"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 160.6,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": true,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 3,
+        "auto_merge_steps": 1
+      }
+    },
+    {
+      "id": "q021",
+      "question": "Pixhawk 6C 的 IMU 设计特点是什么？",
+      "tags": [
+        "manual",
+        "hardware",
+        "system"
+      ],
+      "status": "ok",
+      "latency_ms": 256.2,
+      "document_rank": 1,
+      "evidence_rank": 1,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        }
+      },
+      "returned_chunk_ids": [
+        "063631fa5eeabd00d7f1323eae67a1f0d7b597e015ab1993b1f113ee21cff2ae::p0::l2::0",
+        "063631fa5eeabd00d7f1323eae67a1f0d7b597e015ab1993b1f113ee21cff2ae::p0::l3::3",
+        "063631fa5eeabd00d7f1323eae67a1f0d7b597e015ab1993b1f113ee21cff2ae::p2::l3::1",
+        "038092f76561483c9b51786572f438f8::p11::l3::22",
+        "063631fa5eeabd00d7f1323eae67a1f0d7b597e015ab1993b1f113ee21cff2ae::p3::l3::2",
+        "063631fa5eeabd00d7f1323eae67a1f0d7b597e015ab1993b1f113ee21cff2ae::p5::l3::0"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 140.7,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": true,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 3,
+        "auto_merge_steps": 1
+      }
+    },
+    {
+      "id": "q022",
+      "question": "Faster-LIO 的 iVox 与传统树结构相比有什么设计特点，论文报告的处理速度是多少？",
+      "tags": [
+        "slam",
+        "data_structure",
+        "quantitative",
+        "multi_hop"
+      ],
+      "status": "ok",
+      "latency_ms": 288.4,
+      "document_rank": 2,
+      "evidence_rank": null,
+      "metrics": {
+        "1": {
+          "document_hit": false,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        }
+      },
+      "returned_chunk_ids": [
+        "f8d72c6371835ba766712df6afb78dfdd0f6b0ce8d151fc565fd6fb42e28081e::p6::l3::6",
+        "1796f6983d8e6f19165ab02f28a13e6e345a34c630b94609e3aed22bf7aac9a6::p1::l3::15",
+        "1796f6983d8e6f19165ab02f28a13e6e345a34c630b94609e3aed22bf7aac9a6::p4::l3::18",
+        "1796f6983d8e6f19165ab02f28a13e6e345a34c630b94609e3aed22bf7aac9a6::p1::l3::30",
+        "1796f6983d8e6f19165ab02f28a13e6e345a34c630b94609e3aed22bf7aac9a6::p4::l3::19",
+        "1796f6983d8e6f19165ab02f28a13e6e345a34c630b94609e3aed22bf7aac9a6::p5::l3::4",
+        "1796f6983d8e6f19165ab02f28a13e6e345a34c630b94609e3aed22bf7aac9a6::p4::l3::20",
+        "1796f6983d8e6f19165ab02f28a13e6e345a34c630b94609e3aed22bf7aac9a6::p6::l3::10"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 135.6,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": false,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 0,
+        "auto_merge_steps": 0
+      }
+    },
+    {
+      "id": "q023",
+      "question": "NavRL 针对传统动态环境导航方法的哪些问题提出了什么解决方案？",
+      "tags": [
+        "navigation",
+        "reinforcement_learning",
+        "reasoning",
+        "multi_hop"
+      ],
+      "status": "ok",
+      "latency_ms": 215.0,
+      "document_rank": 1,
+      "evidence_rank": null,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        }
+      },
+      "returned_chunk_ids": [
+        "d05a51b7fa4b326b260db563abfa7fda5f2fc5e92f6af53d3b7c90df511238d0::p0::l3::30",
+        "d05a51b7fa4b326b260db563abfa7fda5f2fc5e92f6af53d3b7c90df511238d0::p1::l3::4",
+        "d05a51b7fa4b326b260db563abfa7fda5f2fc5e92f6af53d3b7c90df511238d0::p0::l3::31",
+        "d05a51b7fa4b326b260db563abfa7fda5f2fc5e92f6af53d3b7c90df511238d0::p6::l3::24",
+        "d05a51b7fa4b326b260db563abfa7fda5f2fc5e92f6af53d3b7c90df511238d0::p6::l3::25",
+        "d05a51b7fa4b326b260db563abfa7fda5f2fc5e92f6af53d3b7c90df511238d0::p0::l3::20",
+        "d05a51b7fa4b326b260db563abfa7fda5f2fc5e92f6af53d3b7c90df511238d0::p1::l3::34",
+        "d05a51b7fa4b326b260db563abfa7fda5f2fc5e92f6af53d3b7c90df511238d0::p6::l3::9"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 97.7,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": false,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 0,
+        "auto_merge_steps": 0
+      }
+    },
+    {
+      "id": "q024",
+      "question": "RAPTOR: Robust and Perception-aware Trajectory Replanning for Quadrotor Fast Flight 为高速未知环境飞行设计了哪些相互配合的规划机制？",
+      "tags": [
+        "planning",
+        "perception",
+        "system",
+        "multi_hop"
+      ],
+      "status": "ok",
+      "latency_ms": 338.3,
+      "document_rank": 1,
+      "evidence_rank": 1,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 0.8333333333333334
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 0.8333333333333334
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 0.8333333333333334
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 0.8333333333333334
+        }
+      },
+      "returned_chunk_ids": [
+        "208a3f0ec3ee23bfb06895d9e276393f94a6e3fa20f8b08845dfca4384df3d01::p0::l3::0",
+        "208a3f0ec3ee23bfb06895d9e276393f94a6e3fa20f8b08845dfca4384df3d01::p1::l3::0",
+        "208a3f0ec3ee23bfb06895d9e276393f94a6e3fa20f8b08845dfca4384df3d01::p0::l3::3",
+        "f0f379fecd3d56384d924c26ec27b801a9ada70fa4471d00dca2432860fdcb80::p0::l3::13",
+        "208a3f0ec3ee23bfb06895d9e276393f94a6e3fa20f8b08845dfca4384df3d01::p1::l3::7",
+        "f0f379fecd3d56384d924c26ec27b801a9ada70fa4471d00dca2432860fdcb80::p5::l3::18",
+        "208a3f0ec3ee23bfb06895d9e276393f94a6e3fa20f8b08845dfca4384df3d01::p0::l3::15",
+        "f0f379fecd3d56384d924c26ec27b801a9ada70fa4471d00dca2432860fdcb80::p0::l3::12"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 153.3,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": false,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 0,
+        "auto_merge_steps": 0
+      }
+    },
+    {
+      "id": "q025",
+      "question": "FAST-LIO2 的两个关键创新点分别解决了什么问题？",
+      "tags": [
+        "robotics",
+        "english",
+        "system"
+      ],
+      "status": "ok",
+      "latency_ms": 243.5,
+      "document_rank": 1,
+      "evidence_rank": 3,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        }
+      },
+      "returned_chunk_ids": [
+        "6b9113d89ab949cd99fa659f89d054494bbe0b851fd714203a45242c9abd6cd5::p12::l3::25",
+        "f8d72c6371835ba766712df6afb78dfdd0f6b0ce8d151fc565fd6fb42e28081e::p13::l3::5",
+        "6b9113d89ab949cd99fa659f89d054494bbe0b851fd714203a45242c9abd6cd5::p0::l3::1",
+        "6b9113d89ab949cd99fa659f89d054494bbe0b851fd714203a45242c9abd6cd5::p0::l3::9",
+        "6b9113d89ab949cd99fa659f89d054494bbe0b851fd714203a45242c9abd6cd5::p17::l3::22",
+        "6b9113d89ab949cd99fa659f89d054494bbe0b851fd714203a45242c9abd6cd5::p18::l3::7",
+        "6b9113d89ab949cd99fa659f89d054494bbe0b851fd714203a45242c9abd6cd5::p16::l3::11",
+        "6b9113d89ab949cd99fa659f89d054494bbe0b851fd714203a45242c9abd6cd5::p15::l3::7"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 138.5,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": false,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 0,
+        "auto_merge_steps": 0
+      }
+    },
+    {
+      "id": "q026",
+      "question": "Forest in situ observations using unmanned aerial vehicle as an alternative of terrestrial measurements论文里，TLS 数据能提供哪些个体树参数？",
+      "tags": [
+        "robotics",
+        "english",
+        "factoid"
+      ],
+      "status": "ok",
+      "latency_ms": 291.0,
+      "document_rank": 1,
+      "evidence_rank": null,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        }
+      },
+      "returned_chunk_ids": [
+        "e24e2f53b7602eefe04b415168055e2d2107c8d671f634812d6dda2d22ed8450::p2::l3::4",
+        "908e21e3dcea1eb228c817f9395b8e97d45660ceaee4336c6d9d7fd9ecedc399::p10::l3::29",
+        "e24e2f53b7602eefe04b415168055e2d2107c8d671f634812d6dda2d22ed8450::p0::l3::16",
+        "908e21e3dcea1eb228c817f9395b8e97d45660ceaee4336c6d9d7fd9ecedc399::p1::l3::13",
+        "8c02c337e2b426579752b95b3297ba71cbcd71f6930531ff1a4f204f662dbac0::p34::l3::18",
+        "f8d72c6371835ba766712df6afb78dfdd0f6b0ce8d151fc565fd6fb42e28081e::p0::l3::31",
+        "a189e34349b5cec253cbb5024284e1430d44a854a53e647bfd197d41f2101f95::p1::l3::10",
+        "908e21e3dcea1eb228c817f9395b8e97d45660ceaee4336c6d9d7fd9ecedc399::p11::l3::25"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 125.5,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": false,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 0,
+        "auto_merge_steps": 0
+      }
+    },
+    {
+      "id": "q027",
+      "question": "乐迪AT9S 适用的模型类型有哪些？",
+      "tags": [
+        "manual",
+        "remote_control",
+        "factoid"
+      ],
+      "status": "ok",
+      "latency_ms": 261.2,
+      "document_rank": 1,
+      "evidence_rank": 4,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        }
+      },
+      "returned_chunk_ids": [
+        "04986ac73355395292b79262f6395e151bf09eef64fe7b76c40786d95e77f1e5::p84::l3::7",
+        "04986ac73355395292b79262f6395e151bf09eef64fe7b76c40786d95e77f1e5::p83::l3::10",
+        "04986ac73355395292b79262f6395e151bf09eef64fe7b76c40786d95e77f1e5::p83::l3::8",
+        "04986ac73355395292b79262f6395e151bf09eef64fe7b76c40786d95e77f1e5::p0::l3::0",
+        "04986ac73355395292b79262f6395e151bf09eef64fe7b76c40786d95e77f1e5::p67::l2::1",
+        "04986ac73355395292b79262f6395e151bf09eef64fe7b76c40786d95e77f1e5::p58::l3::5",
+        "04986ac73355395292b79262f6395e151bf09eef64fe7b76c40786d95e77f1e5::p42::l3::2"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 161.6,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": true,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 2,
+        "auto_merge_steps": 1
+      }
+    },
+    {
+      "id": "q028",
+      "question": "Automatic Stem Mapping 论文提到的传统地面参考数据收集有什么缺点？",
+      "tags": [
+        "english",
+        "system"
+      ],
+      "status": "ok",
+      "latency_ms": 240.2,
+      "document_rank": 3,
+      "evidence_rank": 4,
+      "metrics": {
+        "1": {
+          "document_hit": false,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        }
+      },
+      "returned_chunk_ids": [
+        "5c37cccc6dadc1471e24ff8bfd2d7d3dc2c86b868eb1fcb076f27da6dd9e1ddc::p0::l3::24",
+        "ba60e9d26533198bb0694bfb67ee7501dc2c6e53d825da321622c8cbab202993::p0::l3::8",
+        "8cefde34fde99d6f9a1742333e80d0195c8d085c02d0fda536768361f80f32f1::p16::l3::10",
+        "8cefde34fde99d6f9a1742333e80d0195c8d085c02d0fda536768361f80f32f1::p0::l3::4",
+        "8cefde34fde99d6f9a1742333e80d0195c8d085c02d0fda536768361f80f32f1::p1::l3::3",
+        "5c37cccc6dadc1471e24ff8bfd2d7d3dc2c86b868eb1fcb076f27da6dd9e1ddc::p2::l3::14",
+        "e24e2f53b7602eefe04b415168055e2d2107c8d671f634812d6dda2d22ed8450::p8::l3::10",
+        "a189e34349b5cec253cbb5024284e1430d44a854a53e647bfd197d41f2101f95::p7::l3::1"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 99.5,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": false,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 0,
+        "auto_merge_steps": 0
+      }
+    },
+    {
+      "id": "q029",
+      "question": "HE-Nav 是否需要构建 ESDF 地图？",
+      "tags": [
+        "robotics",
+        "english",
+        "factoid"
+      ],
+      "status": "ok",
+      "latency_ms": 209.9,
+      "document_rank": 1,
+      "evidence_rank": 5,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        }
+      },
+      "returned_chunk_ids": [
+        "59abf4563f80fbf8f193ca21ed8cff78ad6850457a7728d92c6078d3b6644fef::p6::l3::4",
+        "59abf4563f80fbf8f193ca21ed8cff78ad6850457a7728d92c6078d3b6644fef::p1::l3::23",
+        "59abf4563f80fbf8f193ca21ed8cff78ad6850457a7728d92c6078d3b6644fef::p0::l3::10",
+        "59abf4563f80fbf8f193ca21ed8cff78ad6850457a7728d92c6078d3b6644fef::p1::l3::0",
+        "59abf4563f80fbf8f193ca21ed8cff78ad6850457a7728d92c6078d3b6644fef::p7::l3::8",
+        "59abf4563f80fbf8f193ca21ed8cff78ad6850457a7728d92c6078d3b6644fef::p1::l3::24",
+        "59abf4563f80fbf8f193ca21ed8cff78ad6850457a7728d92c6078d3b6644fef::p0::l3::2",
+        "59abf4563f80fbf8f193ca21ed8cff78ad6850457a7728d92c6078d3b6644fef::p0::l3::30"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 107.4,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": false,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 0,
+        "auto_merge_steps": 0
+      }
+    },
+    {
+      "id": "q030",
+      "question": "Coupled Modeling and Fusion 论文里的耦合动力学模型包括哪些部件？",
+      "tags": [
+        "robotics",
+        "english",
+        "factoid"
+      ],
+      "status": "ok",
+      "latency_ms": 212.1,
+      "document_rank": 1,
+      "evidence_rank": 1,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        }
+      },
+      "returned_chunk_ids": [
+        "1bb774ebc5eb1ca361cb51a4b72bcec9eeeb3fbe36ce9bc87cea22ce9cfe4269::p0::l3::0",
+        "59abf4563f80fbf8f193ca21ed8cff78ad6850457a7728d92c6078d3b6644fef::p7::l3::26",
+        "59abf4563f80fbf8f193ca21ed8cff78ad6850457a7728d92c6078d3b6644fef::p7::l3::28",
+        "1bb774ebc5eb1ca361cb51a4b72bcec9eeeb3fbe36ce9bc87cea22ce9cfe4269::p1::l3::3",
+        "1bb774ebc5eb1ca361cb51a4b72bcec9eeeb3fbe36ce9bc87cea22ce9cfe4269::p8::l3::19",
+        "1bb774ebc5eb1ca361cb51a4b72bcec9eeeb3fbe36ce9bc87cea22ce9cfe4269::p1::l3::5",
+        "1bb774ebc5eb1ca361cb51a4b72bcec9eeeb3fbe36ce9bc87cea22ce9cfe4269::p0::l3::8",
+        "1bb774ebc5eb1ca361cb51a4b72bcec9eeeb3fbe36ce9bc87cea22ce9cfe4269::p1::l3::4"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 92.9,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": false,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 0,
+        "auto_merge_steps": 0
+      }
+    },
+    {
+      "id": "q031",
+      "question": "R3LIVE++ 中 LIO 和 VIO 两个子系统分别负责重建什么信息？",
+      "tags": [
+        "slam",
+        "sensor_fusion",
+        "system"
+      ],
+      "status": "ok",
+      "latency_ms": 248.5,
+      "document_rank": 1,
+      "evidence_rank": 4,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        }
+      },
+      "returned_chunk_ids": [
+        "3f08e33395284327aa078c322fff582a::p3::l3::24",
+        "3f08e33395284327aa078c322fff582a::p16::l2::1",
+        "3f08e33395284327aa078c322fff582a::p3::l3::27",
+        "3f08e33395284327aa078c322fff582a::p0::l3::2",
+        "3f08e33395284327aa078c322fff582a::p6::l3::0",
+        "3f08e33395284327aa078c322fff582a::p1::l3::14",
+        "3f08e33395284327aa078c322fff582a::p1::l3::13"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 115.1,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": true,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 2,
+        "auto_merge_steps": 1
+      }
+    },
+    {
+      "id": "q032",
+      "question": "R3LIVE++ 相比 R3LIVE 为提高定位和建图精度额外考虑了哪两项相机因素？",
+      "tags": [
+        "slam",
+        "sensor_fusion",
+        "factoid"
+      ],
+      "status": "ok",
+      "latency_ms": 224.1,
+      "document_rank": 2,
+      "evidence_rank": 2,
+      "metrics": {
+        "1": {
+          "document_hit": false,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        }
+      },
+      "returned_chunk_ids": [
+        "8a9e5643ff99e4d9b735507ddd80fddb6af38401f635d72a0bf017eda57c5695::p3::l3::25",
+        "3f08e33395284327aa078c322fff582a::p0::l3::3",
+        "3f08e33395284327aa078c322fff582a::p16::l3::9",
+        "3f08e33395284327aa078c322fff582a::p0::l3::5",
+        "3f08e33395284327aa078c322fff582a::p0::l3::1",
+        "3f08e33395284327aa078c322fff582a::p1::l2::9",
+        "3f08e33395284327aa078c322fff582a::p15::l3::26"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 100.0,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": true,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 2,
+        "auto_merge_steps": 1
+      }
+    },
+    {
+      "id": "q033",
+      "question": "Visibility-Aware Cooperative Tracking 论文用什么表示三维环境遮挡，并如何实时维护它？",
+      "tags": [
+        "multi_agent",
+        "perception",
+        "algorithm"
+      ],
+      "status": "ok",
+      "latency_ms": 291.1,
+      "document_rank": 1,
+      "evidence_rank": 1,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        }
+      },
+      "returned_chunk_ids": [
+        "8cc4192e595844458ba7a473b11586a3::p0::l3::0",
+        "8cc4192e595844458ba7a473b11586a3::p0::l3::29",
+        "8cc4192e595844458ba7a473b11586a3::p1::l3::20",
+        "8cc4192e595844458ba7a473b11586a3::p1::l3::0",
+        "8cc4192e595844458ba7a473b11586a3::p17::l3::13",
+        "8cc4192e595844458ba7a473b11586a3::p7::l3::13",
+        "8cc4192e595844458ba7a473b11586a3::p17::l3::12",
+        "8cc4192e595844458ba7a473b11586a3::p17::l3::14"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 120.4,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": false,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 0,
+        "auto_merge_steps": 0
+      }
+    },
+    {
+      "id": "q034",
+      "question": "Visibility-Aware Cooperative Tracking 论文通过哪些协同代价项维持无人机对目标的多方向观测？",
+      "tags": [
+        "multi_agent",
+        "planning",
+        "system"
+      ],
+      "status": "ok",
+      "latency_ms": 233.5,
+      "document_rank": 1,
+      "evidence_rank": 6,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        }
+      },
+      "returned_chunk_ids": [
+        "8cc4192e595844458ba7a473b11586a3::p0::l3::0",
+        "55af561ddd6c41038975808d55f437c3::p8::l3::4",
+        "8cc4192e595844458ba7a473b11586a3::p0::l3::29",
+        "8cc4192e595844458ba7a473b11586a3::p17::l3::12",
+        "8cc4192e595844458ba7a473b11586a3::p1::l3::0",
+        "8cc4192e595844458ba7a473b11586a3::p0::l3::8",
+        "8cc4192e595844458ba7a473b11586a3::p0::l3::13",
+        "8cc4192e595844458ba7a473b11586a3::p0::l3::14"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 109.9,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": false,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 0,
+        "auto_merge_steps": 0
+      }
+    },
+    {
+      "id": "q035",
+      "question": "Swarm-LIO2 的即插即用去中心化网络交换哪些低维信息？",
+      "tags": [
+        "multi_agent",
+        "slam",
+        "factoid"
+      ],
+      "status": "ok",
+      "latency_ms": 238.0,
+      "document_rank": 1,
+      "evidence_rank": 4,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        }
+      },
+      "returned_chunk_ids": [
+        "41169c4f0d364df1bc168fa7a0439d41::p13::l3::13",
+        "41169c4f0d364df1bc168fa7a0439d41::p4::l3::5",
+        "41169c4f0d364df1bc168fa7a0439d41::p4::l3::12",
+        "41169c4f0d364df1bc168fa7a0439d41::p0::l2::1",
+        "41169c4f0d364df1bc168fa7a0439d41::p4::l3::13",
+        "41169c4f0d364df1bc168fa7a0439d41::p4::l3::14",
+        "41169c4f0d364df1bc168fa7a0439d41::p0::l3::2"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 111.9,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": true,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 2,
+        "auto_merge_steps": 1
+      }
+    },
+    {
+      "id": "q036",
+      "question": "Swarm-LIO2 在激光雷达退化时如何利用全局外参，规模扩张时又如何控制计算时间？",
+      "tags": [
+        "multi_agent",
+        "slam",
+        "reasoning",
+        "multi_hop"
+      ],
+      "status": "ok",
+      "latency_ms": 373.8,
+      "document_rank": 1,
+      "evidence_rank": 1,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        }
+      },
+      "returned_chunk_ids": [
+        "41169c4f0d364df1bc168fa7a0439d41::p0::l3::11",
+        "41169c4f0d364df1bc168fa7a0439d41::p12::l3::36",
+        "41169c4f0d364df1bc168fa7a0439d41::p13::l3::28",
+        "41169c4f0d364df1bc168fa7a0439d41::p0::l3::6",
+        "41169c4f0d364df1bc168fa7a0439d41::p13::l3::6",
+        "41169c4f0d364df1bc168fa7a0439d41::p17::l3::13",
+        "41169c4f0d364df1bc168fa7a0439d41::p12::l3::34",
+        "41169c4f0d364df1bc168fa7a0439d41::p0::l3::7"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 180.5,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": false,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 0,
+        "auto_merge_steps": 0
+      }
+    },
+    {
+      "id": "q037",
+      "question": "Quadrotor Navigation using Reinforcement Learning with Privileged Information 在训练和部署时分别如何使用 ToA 地图？",
+      "tags": [
+        "navigation",
+        "reinforcement_learning",
+        "process"
+      ],
+      "status": "ok",
+      "latency_ms": 259.3,
+      "document_rank": 1,
+      "evidence_rank": 4,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        }
+      },
+      "returned_chunk_ids": [
+        "919bd5b1586d49a69674f3777d856077::p0::l2::0",
+        "919bd5b1586d49a69674f3777d856077::p2::l3::19",
+        "919bd5b1586d49a69674f3777d856077::p2::l3::20",
+        "919bd5b1586d49a69674f3777d856077::p0::l3::12",
+        "919bd5b1586d49a69674f3777d856077::p0::l3::13",
+        "919bd5b1586d49a69674f3777d856077::p0::l3::3",
+        "919bd5b1586d49a69674f3777d856077::p6::l3::20"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 118.7,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": true,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 2,
+        "auto_merge_steps": 1
+      }
+    },
+    {
+      "id": "q038",
+      "question": "Quadrotor Navigation using Reinforcement Learning with Privileged Information 报告了哪些仿真与实机飞行结果？",
+      "tags": [
+        "navigation",
+        "reinforcement_learning",
+        "quantitative",
+        "multi_hop"
+      ],
+      "status": "ok",
+      "latency_ms": 265.6,
+      "document_rank": 1,
+      "evidence_rank": 1,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        }
+      },
+      "returned_chunk_ids": [
+        "919bd5b1586d49a69674f3777d856077::p0::l2::0",
+        "a64043cb4d3cd4bb02170be9ea26aef9c193fb244acc6a28486a237c765f3413::p12::l3::23",
+        "919bd5b1586d49a69674f3777d856077::p7::l3::25",
+        "a269260c76fd221e749beacb3d071b8f854fd9a827d9c565a919553cf959e61b::p26::l3::7",
+        "919bd5b1586d49a69674f3777d856077::p6::l3::20",
+        "038092f76561483c9b51786572f438f8::p14::l3::36",
+        "919bd5b1586d49a69674f3777d856077::p2::l3::20"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 121.2,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": true,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 2,
+        "auto_merge_steps": 1
+      }
+    },
+    {
+      "id": "q039",
+      "question": "Transformer-Based Cooperative UAV Encirclement 论文如何在观测错误或通信中断下保持决策可靠？",
+      "tags": [
+        "multi_agent",
+        "transformer",
+        "reasoning",
+        "multi_hop"
+      ],
+      "status": "ok",
+      "latency_ms": 288.4,
+      "document_rank": 1,
+      "evidence_rank": null,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        }
+      },
+      "returned_chunk_ids": [
+        "8510c57bacfd4b88b06a0f7c6aef64c3::p0::l3::0",
+        "8510c57bacfd4b88b06a0f7c6aef64c3::p11::l3::9",
+        "8510c57bacfd4b88b06a0f7c6aef64c3::p4::l3::0",
+        "8510c57bacfd4b88b06a0f7c6aef64c3::p11::l3::8",
+        "8510c57bacfd4b88b06a0f7c6aef64c3::p2::l3::25",
+        "8510c57bacfd4b88b06a0f7c6aef64c3::p2::l3::24",
+        "8510c57bacfd4b88b06a0f7c6aef64c3::p6::l3::3",
+        "8510c57bacfd4b88b06a0f7c6aef64c3::p6::l3::2"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 140.8,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": false,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 0,
+        "auto_merge_steps": 0
+      }
+    },
+    {
+      "id": "q040",
+      "question": "Decentralized Multi-Agent Planning Using Model Predictive Control and Time-Aware Safe Corridors 如何将其他智能体的未来位置纳入避碰规划？",
+      "tags": [
+        "multi_agent",
+        "planning",
+        "process",
+        "multi_hop"
+      ],
+      "status": "ok",
+      "latency_ms": 287.7,
+      "document_rank": 1,
+      "evidence_rank": 4,
+      "metrics": {
+        "1": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "3": {
+          "document_hit": true,
+          "evidence_hit": false,
+          "evidence_coverage": 0.0
+        },
+        "5": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 0.5
+        },
+        "8": {
+          "document_hit": true,
+          "evidence_hit": true,
+          "evidence_coverage": 1.0
+        }
+      },
+      "returned_chunk_ids": [
+        "e872fadb0d124937814f1804e9f3c3c7::p7::l3::10",
+        "e872fadb0d124937814f1804e9f3c3c7::p3::l3::3",
+        "e872fadb0d124937814f1804e9f3c3c7::p0::l3::26",
+        "e872fadb0d124937814f1804e9f3c3c7::p0::l3::4",
+        "e872fadb0d124937814f1804e9f3c3c7::p0::l3::25",
+        "e872fadb0d124937814f1804e9f3c3c7::p0::l3::7",
+        "e872fadb0d124937814f1804e9f3c3c7::p1::l3::2",
+        "e872fadb0d124937814f1804e9f3c3c7::p3::l3::0"
+      ],
+      "retrieval_meta": {
+        "rerank_enabled": true,
+        "rerank_applied": true,
+        "rerank_provider": "tei",
+        "rerank_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_endpoint": "http://127.0.0.1:8081/rerank",
+        "rerank_error": null,
+        "rerank_latency_ms": 113.5,
+        "candidate_count": 30,
+        "retrieval_mode": "hybrid",
+        "candidate_k": 30,
+        "leaf_retrieve_level": 3,
+        "auto_merge_enabled": true,
+        "auto_merge_applied": false,
+        "auto_merge_threshold": 2,
+        "auto_merge_replaced_chunks": 0,
+        "auto_merge_steps": 0
+      }
+    }
+  ]
+}
