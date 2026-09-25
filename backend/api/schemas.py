@@ -86,6 +86,9 @@ class RagTrace(BaseModel):
     rewrite_reason: Optional[str] = None
     sub_questions: Optional[List[str]] = None
     sub_agent_count: Optional[int] = None
+    sub_traces: Optional[List[dict]] = None
+    missing_sub_questions: Optional[List[str]] = None
+    failed_sub_questions: Optional[List[str]] = None
     synthesis_merged_count: Optional[int] = None
 
 

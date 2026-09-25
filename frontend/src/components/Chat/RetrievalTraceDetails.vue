@@ -103,10 +103,13 @@
           </div>
         </div>
         <div v-if="msg.ragTrace.sub_agent_count" class="trace-line">
-          并行子 Agent 数量：{{ msg.ragTrace.sub_agent_count }}
+          检索子 Agent 数量：{{ msg.ragTrace.sub_agent_count }}
         </div>
         <div v-if="msg.ragTrace.synthesis_merged_count" class="trace-line">
           合成合并文档数：{{ msg.ragTrace.synthesis_merged_count }}
+        </div>
+        <div v-if="msg.ragTrace.missing_sub_questions?.length" class="trace-line">
+          缺少证据的子问题：{{ msg.ragTrace.missing_sub_questions.join('；') }}
         </div>
 
         <!-- 子 Agent 检索详情（可折叠） -->
@@ -118,6 +121,9 @@
             <div v-for="(st, stIdx) in msg.ragTrace.sub_traces" :key="stIdx" class="sub-trace-block">
               <div class="sub-trace-header">
                 子问题 {{ stIdx + 1 }}：{{ msg.ragTrace.sub_questions?.[stIdx] || st.query || '—' }}
+              </div>
+              <div v-if="st.status" class="trace-line">
+                检索状态：{{ st.status === 'ok' ? '已找到证据' : st.status === 'empty' ? '无证据' : '失败' }}
               </div>
               <div v-if="st.retrieval_stage" class="trace-line">检索阶段：{{ st.retrieval_stage }}</div>
               <div v-if="st.retrieval_mode" class="trace-line">检索模式：{{ st.retrieval_mode }}</div>

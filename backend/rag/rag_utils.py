@@ -3,6 +3,7 @@ import logging
 import os
 import re
 from collections import defaultdict
+from threading import Lock
 from time import monotonic
 from typing import Any, Dict, List, Tuple
 
@@ -17,6 +18,7 @@ from backend.vector.milvus_client import get_milvus_store
 API_KEY = os.getenv("LLM_API_KEY")
 MODEL = os.getenv("LLM_MODEL")
 BASE_URL = os.getenv("LLM_BASE_URL")
+_rerank_lock = Lock()
 RERANK_MODEL = reranker_client.settings.model
 RERANK_BINDING_HOST = reranker_client.settings.base_url
 RERANK_API_KEY = reranker_client.settings.api_key
@@ -141,11 +143,13 @@ def _rerank_documents(query: str, docs: List[dict], top_k: int) -> Tuple[List[di
     started = monotonic()
     try:
         meta["rerank_applied"] = True
-        items = reranker_client.rerank(
-            query,
-            [doc.get("text", "") for doc in docs_with_rank],
-            top_k,
-        )
+        # 本地 TEI 一次只接受一个请求；并行检索仍可并行，重排排队避免 HTTP 429。
+        with _rerank_lock:
+            items = reranker_client.rerank(
+                query,
+                [doc.get("text", "") for doc in docs_with_rank],
+                top_k,
+            )
         reranked = []
         for item in items:
             if 0 <= item.index < len(docs_with_rank):
@@ -280,6 +284,8 @@ def decompose_question(query: str) -> dict:
         "规则：\n"
         f"- 仅当问题包含多个实体或多个主题（如对比、列举、A和B、A/B/C）时才拆分；单主题问题保持不变。\n"
         "- 即使实体名称相似，只要指代不同对象就视为多个实体，必须拆分。\n"
+        "- 对比题按比较对象拆分，每个对象一个子问题，并在该问题中保留原题的所有比较维度；"
+        "不要按比较维度重复拆分同一对象。\n"
         f"- 最多 {MAX_SUB_QUESTIONS} 个子问题，超过则合并相近的。\n"
         "- 每个子问题必须自包含，不得使用『上述』『其』等指代原问题的词。\n"
         '- 严格输出 JSON 数组，例如 ["子问题1", "子问题2"]，不要任何解释或 markdown。\n'

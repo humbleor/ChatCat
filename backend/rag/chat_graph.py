@@ -118,8 +118,11 @@ def _judge_route(question: str) -> str:
             # content 可能是 str 或 list[dict]，统一抽 text
             if isinstance(raw, list):
                 text = "".join(
-                    (b.get("text", "") if isinstance(b, dict) and b.get("type") == "text"
-                     else (b if isinstance(b, str) else ""))
+                    (
+                        b.get("text", "")
+                        if isinstance(b, dict) and b.get("type") == "text"
+                        else (b if isinstance(b, str) else "")
+                    )
                     for b in raw
                 )
             else:
@@ -135,6 +138,7 @@ def _judge_route(question: str) -> str:
                 decision = "generate"
             if os.getenv("ROUTER_DEBUG") == "1":
                 import sys
+
                 print(
                     f"[router] q={question[:40]!r} | first_token={first_token!r} | decision={decision}",
                     file=sys.stderr,
@@ -144,6 +148,7 @@ def _judge_route(question: str) -> str:
     except Exception as e:
         if os.getenv("ROUTER_DEBUG") == "1":
             import sys
+
             print(f"[router] error: {e!r}", file=sys.stderr)
     return "retrieve"  # 兜底：默认尝试检索
 
@@ -348,10 +353,19 @@ def generate(state: ChatState) -> dict:
                 "Answer the user's question using ONLY the retrieved chunks. "
                 "Cite source chunks inline with [1], [2], etc. "
                 "If the chunks are insufficient, say so honestly. "
+                "If sources conflict, explain the disagreement and cite both sides; do not silently choose one. "
                 "Do not mention internal HITL or RAG implementation details."
             )
         )
-        human = HumanMessage(content=f"问题：\n{state['question']}\n\n检索片段：\n{state['context']}")
+        missing = (state.get("rag_trace") or {}).get("missing_sub_questions") or []
+        gaps = (
+            "以下子问题没有检索到证据，请明确说明无法确认的部分，不能根据其他片段推断：\n"
+            + "\n".join(f"- {question}" for question in missing)
+            + "\n\n"
+            if missing
+            else ""
+        )
+        human = HumanMessage(content=f"问题：\n{state['question']}\n\n{gaps}检索片段：\n{state['context']}")
         messages = [system, *_history_to_messages(state["history"]), human]
     elif mode == "weather":
         human = HumanMessage(content=f"问题：\n{state['question']}\n\n天气数据：\n{state['weather_result']}")

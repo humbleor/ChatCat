@@ -49,6 +49,10 @@ export interface RagTraceFields {
   complexity_reason?: string;
   sub_questions?: string[];
   sub_agent_count?: number;
+  status?: 'ok' | 'empty' | 'failed';
+  error?: string | null;
+  missing_sub_questions?: string[];
+  failed_sub_questions?: string[];
   synthesis_merged_count?: number;
   initial_retrieved_chunks?: RetrievedChunk[];
   rewrite_retrieved_chunks?: RetrievedChunk[];
