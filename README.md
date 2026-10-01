@@ -58,6 +58,7 @@ docker logs -f chatcat-reranker
 
 # 停止依赖服务
 docker compose down
+docker compose -f docker-compose.yml -f docker-compose.reranker-gpu.yml --profile reranker down
 ```
 
 其他 GPU 架构可通过 `TEI_RERANKER_GPU_IMAGE` 选择对应的 TEI 镜像。使用本机 TEI 时，在 `.env` 中配置：

@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Tuple
 
 from langchain.chat_models import init_chat_model
 
+from backend.document.document_registry import document_registry
 from backend.document.parent_chunk_store import ParentChunkStore
 from backend.document.text_sanitizer import sanitize_text
 from backend.rag.reranker import RerankerError, reranker_client
@@ -357,9 +358,13 @@ def retrieve_documents(query: str, top_k: int = RETRIEVAL_TOP_K) -> Dict[str, An
     # Milvus 叶子层召回候选数：显式配置优先，未配置则按 top_k * 3 自动推导；始终不小于 top_k
     candidate_k = max(RETRIEVAL_CANDIDATE_K if RETRIEVAL_CANDIDATE_K > 0 else top_k * 3, top_k)
     filters = [f"chunk_level == {LEAF_RETRIEVE_LEVEL}"]
-    if MILVUS_SOFT_DELETE_ENABLED:
+    try:
         filters.append("is_deleted == false")
-    filter_expr = " and ".join(filters)
+        filters.append(document_registry.retrieval_filter())
+        filter_expr = " and ".join(filters)
+    except Exception:
+        logger.exception("文档可见版本查询失败")
+        return failed_meta("document_visibility_unavailable")
 
     try:
         dense_embedding = _embedding_service.get_embeddings([query])[0]

@@ -52,7 +52,7 @@ class MilvusWriter:
                 for doc, dense_emb in zip(batch, dense_embeddings)
             ]
 
-            self.milvus_store.insert(insert_data)
+            self.milvus_store.upsert(insert_data)
 
             # 每个批次写入后更新进度，前端据此展示“向量化入库 xx%”。
             if progress_callback:

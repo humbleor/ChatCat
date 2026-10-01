@@ -25,6 +25,27 @@ def init_db() -> None:
     # idempotent so existing databases gain the document lifecycle columns.
     with engine.begin() as conn:
         conn.execute(
+            text("ALTER TABLE knowledge_documents ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 0")
+        )
+        # Bootstrap existing published documents once; never resurrect deleted heads.
+        conn.execute(
+            text("""
+            INSERT INTO document_heads (filename, current_document_id, version_counter, published_version)
+            SELECT DISTINCT ON (filename) filename, document_id, GREATEST(version, 1), GREATEST(version, 1)
+            FROM knowledge_documents WHERE status = 'active'
+            ORDER BY filename, created_at DESC, document_id DESC
+            ON CONFLICT (filename) DO NOTHING
+        """)
+        )
+        conn.execute(
+            text("""
+            UPDATE knowledge_documents d SET status = 'retiring'
+            FROM document_heads h
+            WHERE d.filename = h.filename AND d.status = 'active'
+              AND d.document_id IS DISTINCT FROM h.current_document_id
+        """)
+        )
+        conn.execute(
             text("ALTER TABLE parent_chunks ADD COLUMN IF NOT EXISTS document_id VARCHAR(64) NOT NULL DEFAULT ''")
         )
         conn.execute(

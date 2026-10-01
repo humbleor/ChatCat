@@ -40,6 +40,7 @@ class ParentChunkStore:
 
         db = SessionLocal()
         upserted = 0
+        cache_updates = []
         try:
             for doc in docs:
                 chunk_id = (doc.get("chunk_id") or "").strip()
@@ -83,13 +84,15 @@ class ParentChunkStore:
                 else:
                     db.add(ParentChunk(chunk_id=chunk_id, **payload))
 
-                cache.set_json(self._cache_key(chunk_id), cache_payload)
+                cache_updates.append((self._cache_key(chunk_id), cache_payload))
                 upserted += 1
 
             db.commit()
         finally:
             db.close()
 
+        for key, payload in cache_updates:
+            cache.set_json(key, payload)
         return upserted
 
     def get_documents_by_ids(self, chunk_ids: List[str]) -> List[dict]:
@@ -172,18 +175,21 @@ class ParentChunkStore:
         finally:
             db.close()
 
-    def delete_by_filename(self, filename: str) -> int:
+    def delete_by_filename(self, filename: str, *, legacy_only: bool = False) -> int:
         """按文件名删除父级分块，返回删除条数。"""
         if not filename:
             return 0
 
         db = SessionLocal()
         try:
-            rows = db.query(ParentChunk).filter(ParentChunk.filename == filename).all()
+            query = db.query(ParentChunk).filter(ParentChunk.filename == filename)
+            if legacy_only:
+                query = query.filter(ParentChunk.document_id == "")
+            rows = query.all()
             chunk_ids = [row.chunk_id for row in rows]
             deleted = len(chunk_ids)
             if deleted > 0:
-                db.query(ParentChunk).filter(ParentChunk.filename == filename).delete(synchronize_session=False)
+                query.delete(synchronize_session=False)
                 db.commit()
                 for chunk_id in chunk_ids:
                     cache.delete(self._cache_key(chunk_id))

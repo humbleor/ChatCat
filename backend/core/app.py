@@ -19,6 +19,7 @@ def create_app() -> FastAPI:
     from backend.api import api as api_module
     from backend.infra.checkpointer import init_checkpointer
     from backend.infra.database import init_db
+    from backend.jobs.persistent_upload_jobs import UploadWorker
     from backend.vector.embedding import embedding_service
 
     preload_mode = os.getenv("EMBEDDING_PRELOAD", "blocking").strip().lower()
@@ -40,11 +41,17 @@ def create_app() -> FastAPI:
             await asyncio.to_thread(embedding_service.warmup)
         elif preload_mode == "background":
             app.state.embedding_warmup_task = asyncio.create_task(_background_warmup())
+        worker = UploadWorker(api_module._process_upload_job, api_module._cleanup_retiring_versions)
+        worker.start()
+        app.state.upload_worker = worker
         app.state.core_ready = True
-        yield
-        task = getattr(app.state, "embedding_warmup_task", None)
-        if task is not None and not task.done():
-            task.cancel()
+        try:
+            yield
+        finally:
+            await asyncio.to_thread(worker.stop)
+            task = getattr(app.state, "embedding_warmup_task", None)
+            if task is not None and not task.done():
+                task.cancel()
 
     app = FastAPI(title="ChatCat Bot API", lifespan=lifespan)
 

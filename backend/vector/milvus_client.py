@@ -194,6 +194,9 @@ class MilvusStore:
     def insert(self, data: list[dict]):
         return self._run(lambda client: client.insert(self.collection_name, data))
 
+    def upsert(self, data: list[dict]):
+        return self._run(lambda client: client.upsert(self.collection_name, data))
+
     def query(
         self,
         filter_expr: str = "",
@@ -222,22 +225,18 @@ class MilvusStore:
 
         def _query_all(client: MilvusClient) -> list:
             out: list = []
-            offset = 0
-            while True:
-                batch = client.query(
-                    collection_name=self.collection_name,
-                    filter=expr,
-                    output_fields=fields,
-                    limit=QUERY_MAX_LIMIT,
-                    offset=offset,
-                    consistency_level="Strong",
-                )
-                if not batch:
-                    break
-                out.extend(batch)
-                if len(batch) < QUERY_MAX_LIMIT:
-                    break
-                offset += len(batch)
+            iterator = client.query_iterator(
+                collection_name=self.collection_name,
+                filter=expr,
+                output_fields=fields,
+                batch_size=1000,
+                consistency_level="Strong",
+            )
+            try:
+                while batch := iterator.next():
+                    out.extend(batch)
+            finally:
+                iterator.close()
             return out
 
         return self._run(_query_all)

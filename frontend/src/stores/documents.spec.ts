@@ -174,9 +174,9 @@ describe('document upload polling', () => {
     });
 
     const responses = [
-      Promise.reject({ message: 'timeout of 60000ms exceeded' }),
-      Promise.reject({ message: 'timeout of 60000ms exceeded' }),
-      Promise.resolve({ data: completedJob }),
+      () => Promise.reject({ message: 'timeout of 60000ms exceeded' }),
+      () => Promise.reject({ message: 'timeout of 60000ms exceeded' }),
+      () => Promise.resolve({ data: completedJob }),
     ];
 
     vi.mocked(api.get).mockImplementation((url: string) => {
@@ -187,7 +187,7 @@ describe('document upload polling', () => {
       }
       if (url === '/documents/upload/jobs/job_retry') {
         const next = responses.shift();
-        return next || Promise.resolve({ data: completedJob });
+        return next ? next() : Promise.resolve({ data: completedJob });
       }
       return Promise.reject(new Error(`Unexpected GET ${url}`));
     });

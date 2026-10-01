@@ -29,10 +29,11 @@ export const useDocumentStore = defineStore('documents', {
     createUploadSteps(): UploadStep[] {
       return [
         { key: 'upload', label: '文档上传', percent: 0, status: 'pending', message: '' },
-        { key: 'cleanup', label: '清理旧版本', percent: 0, status: 'pending', message: '' },
         { key: 'parse', label: '解析与分块', percent: 0, status: 'pending', message: '' },
         { key: 'parent_store', label: '父级分块入库', percent: 0, status: 'pending', message: '' },
         { key: 'vector_store', label: '向量化入库', percent: 0, status: 'pending', message: '' },
+        { key: 'publish', label: '校验与发布', percent: 0, status: 'pending', message: '' },
+        { key: 'cleanup', label: '旧版本下线', percent: 0, status: 'pending', message: '' },
       ];
     },
 

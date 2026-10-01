@@ -129,6 +129,8 @@ class ParentChunk(Base):
 class KnowledgeDocument(Base):
     __tablename__ = "knowledge_documents"
 
+    version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
     document_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     filename: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     file_type: Mapped[str] = mapped_column(String(50), default="", nullable=False)
@@ -141,3 +143,37 @@ class KnowledgeDocument(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     purged_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class DocumentJob(Base):
+    """持久化的文档后台任务，可在进程重启后恢复。"""
+
+    __tablename__ = "document_jobs"
+
+    job_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    job_type: Mapped[str] = mapped_column(String(20), default="upload", nullable=False, index=True)
+    document_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    file_path: Mapped[str] = mapped_column(String(1024), default="", nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="pending", nullable=False, index=True)
+    current_step: Mapped[str] = mapped_column(String(50), default="upload", nullable=False)
+    completion_step: Mapped[str] = mapped_column(String(50), default="cleanup", nullable=False)
+    message: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    total_chunks: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    processed_chunks: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    steps: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class DocumentHead(Base):
+    """One atomic visibility pointer and version counter per logical filename."""
+
+    __tablename__ = "document_heads"
+
+    filename: Mapped[str] = mapped_column(String(255), primary_key=True)
+    current_document_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    version_counter: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    published_version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
