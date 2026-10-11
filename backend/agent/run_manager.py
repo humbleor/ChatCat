@@ -245,7 +245,12 @@ def mark_completed(run_id: str, output_text: str, rag_trace: dict | None = None)
 
 
 def mark_failed(run_id: str, detail: str, *, code: str = "RUN_FAILED") -> bool:
-    return _transition(run_id, ACTIVE_STATUSES, "failed", error_code=code, error_detail=detail)
+    return _transition(run_id, {"running", "waiting_hitl"}, "failed", error_code=code, error_detail=detail)
+
+
+def mark_cancelled(run_id: str) -> bool:
+    """Only the execution owner acknowledges that the worker has exited."""
+    return _transition(run_id, {"cancelling"}, "cancelled", error_code="RUN_CANCELLED", error_detail="运行已取消")
 
 
 def cancel_run(*, username: str, run_id: str) -> RunReservation:
@@ -264,12 +269,17 @@ def cancel_run(*, username: str, run_id: str) -> RunReservation:
                 raise ChatRunError("RUN_NOT_FOUND", "Run 不存在", status_code=404, run_id=run_id)
             run, session_id = row
             if run.status not in TERMINAL_STATUSES:
-                run.status = "cancelled"
+                run.status = "cancelled" if run.status == "waiting_hitl" else "cancelling"
                 run.error_code = "RUN_CANCELLED"
                 run.hitl_json = None
                 run.error_detail = "运行已由用户取消"
-                run.finished_at = datetime.utcnow()
+                if run.status == "cancelled":
+                    run.finished_at = datetime.utcnow()
                 run.updated_at = datetime.utcnow()
+        if run.status in {"cancelling", "cancelled"}:
+            from backend.agent.execution import cancel_local
+
+            cancel_local(run_id)
         _invalidate(username, session_id)
         return _record(run, session_id, created=False)
     finally:

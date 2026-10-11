@@ -1,19 +1,21 @@
+import asyncio
 import json
 import os
 import re
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy.orm import Session
 
-from backend.agent.agent import chat_with_agent, chat_with_agent_stream, storage
+from backend.agent.agent import chat_with_agent_async, chat_with_agent_stream, storage
+from backend.agent.execution import control_call
 from backend.agent.run_manager import (
     ChatRunError,
     RunReservation,
     cancel_run,
     get_run,
+    mark_cancelled,
     mark_failed,
     reserve_resume,
     reserve_run,
@@ -41,6 +43,7 @@ from backend.api.schemas import (
     SessionListResponse,
     SessionMessagesResponse,
 )
+from backend.api.streaming import ChatStreamingResponse
 from backend.document.document_loader import DocumentLoader
 from backend.document.document_registry import document_registry
 from backend.document.document_service import soft_delete_document
@@ -197,7 +200,7 @@ async def delete_session(session_id: str, current_user: User = Depends(get_curre
 
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat_endpoint(request: ChatRequest, current_user: User = Depends(get_current_user)):
+async def chat_endpoint(request: ChatRequest, http_request: Request, current_user: User = Depends(get_current_user)):
     run = _reserve_chat(request, current_user.username)
     if not run.created:
         return ChatResponse(
@@ -209,12 +212,13 @@ async def chat_endpoint(request: ChatRequest, current_user: User = Depends(get_c
         )
 
     try:
-        resp = chat_with_agent(
+        resp = await chat_with_agent_async(
             request.message,
             current_user.username,
             run.session_id,
             run_id=run.run_id,
             resume=bool(request.resume_run_id),
+            http_request=http_request,
         )
         if isinstance(resp, dict):
             return ChatResponse(**resp)
@@ -240,20 +244,34 @@ async def chat_endpoint(request: ChatRequest, current_user: User = Depends(get_c
 async def chat_stream_endpoint(request: ChatRequest, current_user: User = Depends(get_current_user)):
     """跟 Agent 对话 (流式)"""
     run = _reserve_chat(request, current_user.username)
+    on_disconnect = None
     if not run.created:
         stream = _replay_run_stream(run)
     else:
+        producer_started = False
+
+        async def on_disconnect():
+            await control_call(cancel_run, username=current_user.username, run_id=run.run_id)
+            if not producer_started:
+                # Disconnect may win the race before the generator's first step.
+                await control_call(mark_cancelled, run.run_id)
 
         async def event_generator():
+            nonlocal producer_started
+            producer_started = True
             try:
-                async for chunk in chat_with_agent_stream(
+                producer = chat_with_agent_stream(
                     request.message,
                     current_user.username,
                     run.session_id,
                     run_id=run.run_id,
                     resume=bool(request.resume_run_id),
-                ):
-                    yield chunk
+                )
+                try:
+                    async for chunk in producer:
+                        yield chunk
+                finally:
+                    await producer.aclose()
             except Exception as e:
                 mark_failed(run.run_id, str(e))
                 error_data = {"type": "error", "content": str(e), "run_id": run.run_id}
@@ -262,8 +280,9 @@ async def chat_stream_endpoint(request: ChatRequest, current_user: User = Depend
 
         stream = event_generator()
 
-    return StreamingResponse(
+    return ChatStreamingResponse(
         stream,
+        on_disconnect=on_disconnect,
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -287,10 +306,10 @@ async def cancel_chat_run(run_id: str, current_user: User = Depends(get_current_
     from backend.infra.checkpointer import get_checkpointer
 
     try:
-        before = get_run(username=current_user.username, run_id=run_id)
-        cancelled = cancel_run(username=current_user.username, run_id=run_id)
-        if before.status == "waiting_hitl":
-            get_checkpointer().delete_thread(before.checkpoint_thread_id)
+        before = await control_call(get_run, username=current_user.username, run_id=run_id)
+        cancelled = await control_call(cancel_run, username=current_user.username, run_id=run_id)
+        if before.status == "waiting_hitl" and cancelled.status == "cancelled":
+            await asyncio.to_thread(get_checkpointer().delete_thread, before.checkpoint_thread_id)
         return ChatRunResponse(**cancelled.public_dict())
     except ChatRunError as exc:
         raise _run_http_error(exc) from exc

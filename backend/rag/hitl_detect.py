@@ -178,7 +178,9 @@ def _judge_clarification(question: str, router_model, history=None) -> Optional[
         + f"查询：{question}"
     )
     try:
-        res = router_model.invoke([{"role": "user", "content": prompt}])
+        from backend.agent.execution import invoke_model
+
+        res = invoke_model(router_model, [{"role": "user", "content": prompt}])
         text = strip_think(_safe_text(getattr(res, "content", str(res))))
         if text.upper().startswith("NO") or not text:
             return None

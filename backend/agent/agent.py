@@ -13,6 +13,7 @@ from datetime import datetime
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.types import Command
 
+from backend.agent.execution import Execution, check_cancelled, control_call, emit_event, invoke_model
 from backend.infra.cache import cache
 from backend.infra.database import SessionLocal
 from backend.models.models import ChatMessage, ChatRun, ChatSession, User
@@ -36,6 +37,8 @@ def _get_fast_model():
             api_key=os.getenv("LLM_API_KEY"),
             base_url=os.getenv("LLM_BASE_URL"),
             temperature=0.0,
+            timeout=60,
+            max_retries=0,
         )
     return _fast_model
 
@@ -438,7 +441,7 @@ def summarize_old_messages(model, messages: list) -> str:
 {old_conversation}
 总结（包含用户信息、重要事实、待办事项）："""
 
-    summary = model.invoke(summary_prompt).content
+    summary = invoke_model(model, summary_prompt).content
     return summary
 
 
@@ -510,10 +513,8 @@ def _title_for(metadata: dict, is_first_message: bool, user_text: str) -> str | 
 
 
 async def update_persistent_note(current_note, user_text, ai_response, history_messages=None):
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(
-        None,
-        lambda: _update_persistent_note_sync(current_note, user_text, ai_response, history_messages=history_messages),
+    return await asyncio.to_thread(
+        _update_persistent_note_sync, current_note, user_text, ai_response, history_messages=history_messages
     )
 
 
@@ -535,7 +536,7 @@ def _update_persistent_note_sync(current_note, user_text, ai_response, *, histor
             f"▼ 最新一轮对话：\n用户：{user_text}\nAI：{ai_response}\n\n"
             "请直接输出更新后的笔记（纯文本，不要解释或 Markdown 代码块）："
         )
-        res = _get_fast_model().invoke([HumanMessage(content=prompt)])
+        res = invoke_model(_get_fast_model(), [HumanMessage(content=prompt)])
         return (res.content or "").strip()
     except Exception as e:
         print(f"Context Manager Error: {e}")
@@ -567,7 +568,12 @@ def _run_graph_turn(input_data: dict, cfg: dict) -> tuple[list[dict], dict, dict
     from backend.rag.chat_graph import build_chat_graph
 
     graph = build_chat_graph(checkpointer=get_checkpointer())
-    events = list(graph.stream(input_data, config=cfg, stream_mode=["custom"]))
+    events = []
+    for kind, data in graph.stream(input_data, config=cfg, stream_mode=["custom"]):
+        check_cancelled()
+        events.append((kind, data))
+        emit_event(data)
+    check_cancelled()
     snap = graph.get_state(cfg)
     pending = None
     if snap.tasks and getattr(snap.tasks[0], "interrupts", None):
@@ -583,9 +589,12 @@ def chat_with_agent(
     run_id: str,
     resume: bool = False,
 ):
+    check_cancelled()
     messages, metadata = storage.load_with_meta(user_id, session_id)
     persistent_note = metadata.get("persistent_note", "")
     is_first_message = len(messages) == 1
+    if is_first_message:
+        emit_event({"type": "session_title", "title": generate_session_title(user_text), "session_id": session_id})
     messages = _manage_context_window(messages, _get_context_model())
 
     cfg = _session_thread_config(user_id, session_id, run_id)
@@ -618,6 +627,7 @@ def chat_with_agent(
         title = _title_for(metadata, is_first_message, user_text)
         if title:
             save_meta["title"] = title
+        check_cancelled()
         saved = storage.save(
             user_id,
             session_id,
@@ -644,6 +654,7 @@ def chat_with_agent(
     save_meta = dict(metadata)
     if is_first_message:
         save_meta["title"] = generate_session_title(user_text)
+    check_cancelled()
     if _should_update_persistent_note(messages, persistent_note):
         save_meta["persistent_note"] = _update_persistent_note_sync(
             persistent_note,
@@ -653,6 +664,7 @@ def chat_with_agent(
         )
     messages.append(AIMessage(content=full_response))
     extra = [None] * (len(messages) - 1) + [{"rag_trace": rag_trace}]
+    check_cancelled()
     saved = storage.save(
         user_id,
         session_id,
@@ -669,6 +681,26 @@ def chat_with_agent(
     return {"response": full_response, "rag_trace": rag_trace, "run_id": run_id, "status": "completed"}
 
 
+async def chat_with_agent_async(*args, run_id: str, http_request=None, **kwargs):
+    user_id = args[1] if len(args) > 1 else kwargs.get("user_id", "default_user")
+    execution = Execution(run_id, user_id)
+
+    async def watch_disconnect():
+        while True:
+            if await http_request.is_disconnected():
+                execution.stop()
+                return
+            await asyncio.sleep(0.1)
+
+    watcher = asyncio.create_task(watch_disconnect()) if http_request is not None else None
+    try:
+        return await execution.run(chat_with_agent, *args, run_id=run_id, **kwargs)
+    finally:
+        if watcher is not None:
+            watcher.cancel()
+            await asyncio.gather(watcher, return_exceptions=True)
+
+
 async def chat_with_agent_stream(
     user_text: str,
     user_id: str = "default_user",
@@ -677,162 +709,56 @@ async def chat_with_agent_stream(
     run_id: str,
     resume: bool = False,
 ):
-    """流式驱动图：把整轮跑进线程，将 custom 事件经 asyncio.Queue 转发为 SSE。"""
-    from backend.agent.run_manager import mark_failed
+    """Forward graph events while the execution owns model I/O and cancellation."""
+    from backend.agent.run_manager import cancel_run
 
-    yield f"data: {json.dumps({'type': 'run', 'run_id': run_id, 'status': 'running'})}\n\n"
-    yield f"data: {json.dumps({'type': 'rag_step', 'step': {'icon': '📨', 'label': '请求已接收，正在准备回答'}})}\n\n"
-
-    messages, metadata = storage.load_with_meta(user_id, session_id)
-    persistent_note = metadata.get("persistent_note", "")
-    is_first_message = len(messages) == 1
-
-    messages = _manage_context_window(messages, _get_context_model())
-
-    from backend.infra.checkpointer import get_checkpointer
-    from backend.rag.chat_graph import build_chat_graph
-
-    cfg = _session_thread_config(user_id, session_id, run_id)
-    graph = build_chat_graph(checkpointer=get_checkpointer())
-
-    input_data = (
-        Command(resume=user_text)
-        if resume
-        else {
-            "user_text": user_text,
-            "persistent_note": persistent_note,
-            "history": _history_dicts(messages[:-1]),
-        }
+    queue: asyncio.Queue = asyncio.Queue()
+    execution = Execution(run_id, user_id, queue.put_nowait)
+    task = asyncio.create_task(
+        execution.run(chat_with_agent, user_text, user_id, session_id, run_id=run_id, resume=resume)
     )
-
-    output_queue: asyncio.Queue = asyncio.Queue()
-    worker_error: list[str] = []
-    # asyncio.Queue 非线程安全：_worker 跑在 to_thread 的 executor 线程里，
-    # 必须经由捕获的事件循环用 call_soon_threadsafe 投递，否则并发 put 会撕裂队列。
-    loop = asyncio.get_running_loop()
-
-    def _safe_put(data):
-        loop.call_soon_threadsafe(output_queue.put_nowait, data)
-
-    def _worker():
-        try:
-            for kind, data in graph.stream(input_data, config=cfg, stream_mode=["custom"]):
-                if kind != "custom":
-                    continue
-                _safe_put(data)
-            _safe_put(None)
-        except Exception as e:
-            worker_error.append(str(e))
-            _safe_put({"type": "error", "content": str(e)})
-            _safe_put(None)
-
-    task = asyncio.create_task(asyncio.to_thread(_worker))
-
-    full_response = ""
-    session_title = None
-    if is_first_message:
-        session_title = generate_session_title(user_text)
-        yield f"data: {json.dumps({'type': 'session_title', 'title': session_title, 'session_id': session_id})}\n\n"
-
+    # A sentinel also wakes the consumer if the model produces no tokens.
+    task.add_done_callback(lambda _task: queue.put_nowait(None))
+    finished = False
     try:
+        yield f"data: {json.dumps({'type': 'run', 'run_id': run_id, 'status': 'running'})}\n\n"
+        received = {"type": "rag_step", "step": {"icon": "📨", "label": "请求已接收，正在准备回答"}}
+        yield f"data: {json.dumps(received)}\n\n"
         while True:
-            ev = await output_queue.get()
-            if ev is None:
+            event = await queue.get()
+            if event is None:
                 break
-            if ev.get("type") == "content":
-                full_response += ev.get("content", "")
-                yield f"data: {json.dumps(ev)}\n\n"
-            elif ev.get("type") == "rag_step":
-                yield f"data: {json.dumps(ev)}\n\n"
-            elif ev.get("type") == "error":
-                yield f"data: {json.dumps(ev)}\n\n"
-    except (GeneratorExit, asyncio.CancelledError):
-        mark_failed(run_id, "客户端已断开连接", code="CLIENT_DISCONNECTED")
-        task.cancel()
-        raise
+            if not execution.stopped.is_set():
+                yield f"data: {json.dumps(event)}\n\n"
+        finished = True
+        result = await task
+        if result.get("rag_trace"):
+            yield f"data: {json.dumps({'type': 'trace', 'rag_trace': result['rag_trace']})}\n\n"
+        if result.get("hitl"):
+            yield f"data: {json.dumps({'type': 'hitl_request', 'run_id': run_id, 'hitl': result['hitl']})}\n\n"
+        yield f"data: {json.dumps({'type': 'run', 'run_id': run_id, 'status': result['status']})}\n\n"
+        yield "data: [DONE]\n\n"
     finally:
-        if not task.done():
-            task.cancel()
+        if not finished:
+            execution.stop()
 
-    if worker_error:
-        mark_failed(run_id, worker_error[0])
-        yield f"data: {json.dumps({'type': 'run', 'run_id': run_id, 'status': 'failed'})}\n\n"
-        yield "data: [DONE]\n\n"
-        return
-    snap = await asyncio.to_thread(graph.get_state, cfg)
-    hitl_value = None
-    if snap.tasks and getattr(snap.tasks[0], "interrupts", None):
-        hitl_value = snap.tasks[0].interrupts[0].value
+            # Cleanup survives ASGI cancellation. The execution remains registered
+            # until the real worker exits, including a currently running embedding.
+            async def cleanup():
+                try:
+                    await control_call(cancel_run, username=user_id, run_id=run_id)
+                finally:
+                    await asyncio.gather(task, return_exceptions=True)
 
-    rag_trace = normalize_rag_trace(snap.values.get("rag_trace") if hasattr(snap, "values") else None)
-    if rag_trace:
-        yield f"data: {json.dumps({'type': 'trace', 'rag_trace': rag_trace})}\n\n"
+            cleanup_task = asyncio.create_task(cleanup())
+            _stream_cleanups.add(cleanup_task)
+            cleanup_task.add_done_callback(_finish_stream_cleanup)
 
-    if hitl_value is not None:
-        hitl_event = {
-            "route": hitl_value.get("route"),
-            "prompt": hitl_value.get("prompt"),
-            "options": hitl_value.get("options") or [],
-            "run_id": run_id,
-        }
-        hitl_text = format_hitl_message(hitl_event["prompt"], hitl_event["options"])
-        messages.append(AIMessage(content=hitl_text))
-        extra = [None] * (len(messages) - 1) + [{"rag_trace": rag_trace}]
-        save_meta = dict(metadata)
-        if session_title:
-            save_meta["title"] = session_title
-        saved = storage.save(
-            user_id,
-            session_id,
-            messages,
-            metadata=save_meta,
-            extra_message_data=extra,
-            run_id=run_id,
-            run_target_status="waiting_hitl",
-            run_rag_trace=rag_trace,
-            run_hitl=hitl_event,
-        )
-        if not saved:
-            yield f"data: {json.dumps({'type': 'run', 'run_id': run_id, 'status': 'cancelled'})}\n\n"
-            yield "data: [DONE]\n\n"
-            return
-        yield f"data: {json.dumps({'type': 'hitl_request', 'run_id': run_id, 'hitl': hitl_event})}\n\n"
-        yield "data: [DONE]\n\n"
-        return
 
-    full_response = full_response or snap.values.get("response", "")
+_stream_cleanups: set[asyncio.Task] = set()
 
-    save_meta = dict(metadata)
 
-    if session_title:
-        save_meta["title"] = session_title
-    if _should_update_persistent_note(messages, persistent_note):
-        try:
-            save_meta["persistent_note"] = await update_persistent_note(
-                persistent_note,
-                user_text,
-                full_response,
-                history_messages=messages[:-1] if not persistent_note else None,
-            )
-        except Exception as e:
-            print(f"Update persistent note error: {e}")
-    messages.append(AIMessage(content=full_response))
-    extra = [None] * (len(messages) - 1) + [{"rag_trace": rag_trace}]
-    saved = storage.save(
-        user_id,
-        session_id,
-        messages,
-        metadata=save_meta,
-        extra_message_data=extra,
-        run_id=run_id,
-        run_target_status="completed",
-        run_output_text=full_response,
-        run_rag_trace=rag_trace,
-    )
-    if not saved:
-        yield f"data: {json.dumps({'type': 'run', 'run_id': run_id, 'status': 'cancelled'})}\n\n"
-        yield "data: [DONE]\n\n"
-        return
-    yield f"data: {json.dumps({'type': 'run', 'run_id': run_id, 'status': 'completed'})}\n\n"
-
-    yield "data: [DONE]\n\n"
+def _finish_stream_cleanup(task):
+    _stream_cleanups.discard(task)
+    if not task.cancelled() and task.exception() is not None:
+        logger.error("Stream cancellation cleanup failed", exc_info=task.exception())

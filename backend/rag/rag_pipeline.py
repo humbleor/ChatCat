@@ -6,6 +6,7 @@ from langgraph.graph import END, StateGraph
 from langgraph.types import Send
 from pydantic import BaseModel, Field
 
+from backend.agent.execution import cancellable_node, invoke_model
 from backend.agent.tools import emit_rag_step
 from backend.rag.rag_utils import (
     RETRIEVAL_TOP_K,
@@ -43,6 +44,8 @@ def _get_grader_model():
             base_url=BASE_URL,
             temperature=0,
             stream_usage=True,
+            timeout=60,
+            max_retries=0,
         )
     return _grader_model
 
@@ -59,6 +62,8 @@ def _get_router_model():
             base_url=BASE_URL,
             temperature=0,
             stream_usage=True,
+            timeout=60,
+            max_retries=0,
         )
     return _router_model
 
@@ -210,7 +215,7 @@ def grade_documents_node(state: RAGState) -> RAGState:
             raise RuntimeError("grader 模型未配置")
         prompt = GRADE_PROMPT.format(question=question, context=context)
         # 推理模型会先输出 <think>...</think> 推理块，剥掉再喂给 Pydantic 校验。
-        raw = grader.invoke([{"role": "user", "content": prompt}]).content or ""
+        raw = invoke_model(grader, [{"role": "user", "content": prompt}]).content or ""
         cleaned = strip_think(raw)
         result: GradeResult = GradeResult.model_validate_json(cleaned)
         # yes + 高 confidence 才放行；unsure + 极高 confidence 也可放行
@@ -280,7 +285,7 @@ def rewrite_question_node(state: RAGState) -> RAGState:
         try:
             # 推理模型会先输出 <think>...</think> 推理块，剥掉再喂给 Pydantic 校验，
             # 否则 message.content 开头是 '<' 不是 '{'，ValidationError 抛出。
-            raw = router.invoke([{"role": "user", "content": prompt}]).content or ""
+            raw = invoke_model(router, [{"role": "user", "content": prompt}]).content or ""
             cleaned = strip_think(raw)
             result: StrategyResult = StrategyResult.model_validate_json(cleaned)
             strategy = result.strategy
@@ -605,12 +610,12 @@ def synthesize_subquestions(state: RAGState) -> dict:
 
 def build_rag_graph():
     graph = StateGraph(RAGState)
-    graph.add_node("retrieve_initial", retrieve_initial)
-    graph.add_node("grade_documents", grade_documents_node)
-    graph.add_node("rewrite_question", rewrite_question_node)
-    graph.add_node("retrieve_expanded", retrieve_expanded)
-    graph.add_node("retrieve_subquestion", retrieve_subquestion)
-    graph.add_node("synthesize_subquestions", synthesize_subquestions)
+    graph.add_node("retrieve_initial", cancellable_node(retrieve_initial))
+    graph.add_node("grade_documents", cancellable_node(grade_documents_node))
+    graph.add_node("rewrite_question", cancellable_node(rewrite_question_node))
+    graph.add_node("retrieve_expanded", cancellable_node(retrieve_expanded))
+    graph.add_node("retrieve_subquestion", cancellable_node(retrieve_subquestion))
+    graph.add_node("synthesize_subquestions", cancellable_node(synthesize_subquestions))
 
     graph.set_entry_point("retrieve_initial")
     graph.add_edge("retrieve_initial", "grade_documents")

@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 def create_app() -> FastAPI:
+    from backend.agent.execution import shutdown_executions
     from backend.api import api as api_module
     from backend.infra.checkpointer import init_checkpointer
     from backend.infra.database import init_db
@@ -48,6 +49,7 @@ def create_app() -> FastAPI:
         try:
             yield
         finally:
+            await shutdown_executions()
             await asyncio.to_thread(worker.stop)
             task = getattr(app.state, "embedding_warmup_task", None)
             if task is not None and not task.done():

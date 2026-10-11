@@ -12,6 +12,7 @@ from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 
+from backend.agent.execution import cancellable_node, invoke_model, stream_model
 from backend.rag.hitl_detect import (
     HitlDecision,
     compose_question,
@@ -56,6 +57,8 @@ def _get_chat_model():
             api_key=os.getenv("LLM_API_KEY"),
             base_url=os.getenv("LLM_BASE_URL"),
             temperature=0.3,
+            timeout=60,
+            max_retries=0,
         )
     return _chat_model
 
@@ -113,7 +116,7 @@ def _judge_route(question: str) -> str:
                 "不确定时一律 retrieve。只输出 retrieve 或 generate，一个词。\n"
                 f"用户问题：{question}"
             )
-            res = router.invoke([{"role": "user", "content": prompt}])
+            res = invoke_model(router, [{"role": "user", "content": prompt}])
             raw = res.content
             # content 可能是 str 或 list[dict]，统一抽 text
             if isinstance(raw, list):
@@ -299,7 +302,7 @@ def _extract_location_llm(question: str, router_model=None) -> Optional[str]:
             "如果查询中没有明确的城市名，只输出 NONE。\n"
             f"查询：{question}"
         )
-        res = router_model.invoke([{"role": "user", "content": prompt}])
+        res = invoke_model(router_model, [{"role": "user", "content": prompt}])
         text = str(getattr(res, "content", "") or "").strip()
         if not text:
             return None
@@ -388,7 +391,7 @@ def generate(state: ChatState) -> dict:
     model = _get_chat_model()
     raw_full = ""
     try:
-        for chunk in model.stream(messages):
+        for chunk in stream_model(model, messages):
             content = chunk.content if hasattr(chunk, "content") else str(chunk)
             # content 可能是 str 或 list[dict]，统一抽 text
             if isinstance(content, list):
@@ -444,12 +447,12 @@ def build_chat_graph(
     _check_hitl = _make_check_hitl(_detect)
 
     g = StateGraph(ChatState)
-    g.add_node("prepare_context", prepare_context)
-    g.add_node("route", route)
-    g.add_node("retrieve", _retrieve)
-    g.add_node("check_hitl", _check_hitl)
-    g.add_node("weather", _weather)
-    g.add_node("generate", _generate)
+    g.add_node("prepare_context", cancellable_node(prepare_context))
+    g.add_node("route", cancellable_node(route))
+    g.add_node("retrieve", cancellable_node(_retrieve))
+    g.add_node("check_hitl", cancellable_node(_check_hitl))
+    g.add_node("weather", cancellable_node(_weather))
+    g.add_node("generate", cancellable_node(_generate))
 
     g.add_edge(START, "prepare_context")
     g.add_edge("prepare_context", "route")

@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Tuple
 
 from langchain.chat_models import init_chat_model
 
+from backend.agent.execution import check_cancelled, invoke_model
 from backend.document.document_registry import document_registry
 from backend.document.parent_chunk_store import ParentChunkStore
 from backend.document.text_sanitizer import sanitize_text
@@ -178,6 +179,8 @@ def _get_stepback_model():
             api_key=API_KEY,
             base_url=BASE_URL,
             temperature=0.2,
+            timeout=60,
+            max_retries=0,
         )
     return _stepback_model
 
@@ -192,7 +195,7 @@ def _generate_step_back_question(query: str) -> str:
         f"用户问题：{query}"
     )
     try:
-        return (model.invoke(prompt).content or "").strip()
+        return (invoke_model(model, prompt).content or "").strip()
     except Exception:
         return ""
 
@@ -207,7 +210,7 @@ def _answer_step_back_question(step_back_question: str) -> str:
         f"退步问题：{step_back_question}"
     )
     try:
-        return (model.invoke(prompt).content or "").strip()
+        return (invoke_model(model, prompt).content or "").strip()
     except Exception:
         return ""
 
@@ -223,7 +226,7 @@ def generate_hypothetical_document(query: str) -> str:
         f"用户问题：{query}"
     )
     try:
-        return (model.invoke(prompt).content or "").strip()
+        return (invoke_model(model, prompt).content or "").strip()
     except Exception:
         return ""
 
@@ -293,7 +296,7 @@ def decompose_question(query: str) -> dict:
         f"用户问题：{query}"
     )
     try:
-        raw = (model.invoke(prompt).content or "").strip()
+        raw = (invoke_model(model, prompt).content or "").strip()
     except Exception:
         return {"sub_questions": [query]}
 
@@ -354,6 +357,7 @@ def retrieve_documents(query: str, top_k: int = RETRIEVAL_TOP_K) -> Dict[str, An
             },
         }
 
+    check_cancelled()
     query = sanitize_text(query)
     # Milvus 叶子层召回候选数：显式配置优先，未配置则按 top_k * 3 自动推导；始终不小于 top_k
     candidate_k = max(RETRIEVAL_CANDIDATE_K if RETRIEVAL_CANDIDATE_K > 0 else top_k * 3, top_k)
@@ -367,6 +371,7 @@ def retrieve_documents(query: str, top_k: int = RETRIEVAL_TOP_K) -> Dict[str, An
         return failed_meta("document_visibility_unavailable")
 
     try:
+        check_cancelled()
         dense_embedding = _embedding_service.get_embeddings([query])[0]
     except Exception:
         logger.exception("查询向量生成失败")
@@ -374,6 +379,7 @@ def retrieve_documents(query: str, top_k: int = RETRIEVAL_TOP_K) -> Dict[str, An
 
     retrieval_mode = "hybrid"
     try:
+        check_cancelled()
         retrieved = _milvus_store.hybrid_retrieve(
             dense_embedding=dense_embedding,
             query=query,
@@ -384,6 +390,7 @@ def retrieve_documents(query: str, top_k: int = RETRIEVAL_TOP_K) -> Dict[str, An
         logger.warning("混合检索失败，降级为稠密检索", exc_info=True)
         retrieval_mode = "dense_fallback"
         try:
+            check_cancelled()
             retrieved = _milvus_store.dense_retrieve(
                 dense_embedding=dense_embedding,
                 top_k=candidate_k,
@@ -394,7 +401,9 @@ def retrieve_documents(query: str, top_k: int = RETRIEVAL_TOP_K) -> Dict[str, An
             return failed_meta("retrieve_failed")
 
     try:
+        check_cancelled()
         reranked, rerank_meta = _rerank_documents(query=query, docs=retrieved, top_k=top_k)
+        check_cancelled()
         merged_docs, merge_meta = _auto_merge_documents(docs=reranked, top_k=top_k)
         rerank_meta["retrieval_mode"] = retrieval_mode
         rerank_meta["candidate_k"] = candidate_k
