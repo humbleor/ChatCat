@@ -6,7 +6,7 @@ HITL 用 LangGraph 原生 interrupt/Command(resume)；节点全同步，RAG 步�
 
 import os
 import re
-from typing import Callable, Optional, TypedDict
+from typing import Callable, Literal, Optional, TypedDict
 
 from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
@@ -18,6 +18,7 @@ from backend.rag.hitl_detect import (
     compose_question,
     normalize_rag_trace,
 )
+from backend.rag.rag_pipeline import QUERY_PLAN_INSTRUCTIONS, QueryPlanResult, _format_query_history
 from backend.rag.rag_utils import strip_think
 
 NO_KNOWLEDGE = "知识库中没有找到可靠的相关信息，暂时无法基于知识库回答这个问题。"
@@ -35,6 +36,7 @@ class ChatState(TypedDict):
     docs: list[dict]
     context: str
     rag_trace: dict
+    query_plan: Optional[dict]
     weather_result: str
     weather_location: str
     response: str
@@ -74,6 +76,7 @@ def prepare_context(state: ChatState) -> dict:
         "docs": [],
         "context": "",
         "rag_trace": {},
+        "query_plan": None,
         "weather_result": "",
         "weather_location": "",
         "response": "",
@@ -83,38 +86,43 @@ def prepare_context(state: ChatState) -> dict:
 _WEATHER_KEYWORDS = ("天气", "气温", "下雨", "下雪", "降雨", "气象", "weather", "forecast", "climate")
 
 
-def _judge_route(question: str) -> str:
+class RouteDecision(QueryPlanResult):
+    mode: Literal["retrieve", "generate", "weather"] = "retrieve"
+    weather_location: str = ""
+
+
+def _judge_route(question: str, history: list[dict] | None = None) -> RouteDecision:
+    """一次模型请求同时选择聊天分支、检索策略及消歧后的查询。"""
     q = question.strip().lower()
     if any(k in q for k in _WEATHER_KEYWORDS):
-        # 命中天气信号还不够：必须能从问句里提取出干净城市名才走天气，
-        # 否则像「设备温度报警规程」这类含工程词的 KB 查询会被误路由。
-        try:
-            from backend.rag.rag_pipeline import _get_router_model
-
-            router = _get_router_model()
-        except Exception:
-            router = None
-        if _extract_location(question, router):
-            return "weather"
-        return "retrieve"
+        location = _extract_location_fast(question)
+        if location:
+            return RouteDecision(mode="weather", weather_location=location)
     try:
         from backend.rag.rag_pipeline import _get_router_model
 
         router = _get_router_model()
         if router is not None:
             prompt = (
-                "你是一个知识库助手的路由器。判断用户问题是否需要检索 KB 文档。\n\n"
+                "你是知识库助手的路由器。在同一次判断里选择聊天分支和检索策略。\n\n"
                 "→ retrieve（默认）的场景：\n"
                 "  - 询问概念/含义/解释/定义（如'什么是 X'、'X 的含义'）\n"
                 "  - 询问文档中的具体说明、参数、流程、对比\n"
                 "  - 询问技术名词、术语解释\n"
                 "  - 涉及论文/手册/文档中具体内容\n\n"
                 "→ generate 的场景：\n"
-                "  - 寒暄、闲聊、问候、天气 \n"
+                "  - 寒暄、闲聊、问候\n"
                 "  - 询问主观观点\n"
                 "  - 纯数学/编程/通识计算（与具体文档无关）\n\n"
-                "不确定时一律 retrieve。只输出 retrieve 或 generate，一个词。\n"
-                f"用户问题：{question}"
+                "→ weather：查询具体城市的天气；同时在 weather_location 中填写干净城市名。\n"
+                "工程设备温度、气象文档说明等知识问题仍选 retrieve。缺少城市时选 generate 询问城市。\n"
+                "不确定时选择 retrieve。仅 retrieve 分支需要规划查询，其余分支 strategy 为 direct、query 为空。\n"
+                + QUERY_PLAN_INSTRUCTIONS
+                + '严格输出 JSON：{"mode":"retrieve|generate|weather",'
+                '"strategy":"direct|step_back|hyde|complex","query":"可选的独立问题",'
+                '"reason":"一句话理由","weather_location":"城市名或空字符串"}。\n'
+                + _format_query_history(history)
+                + f"用户问题：{question}"
             )
             res = invoke_model(router, [{"role": "user", "content": prompt}])
             raw = res.content
@@ -133,43 +141,30 @@ def _judge_route(question: str) -> str:
             cleaned = strip_think(text).strip().strip("`")
             if cleaned.lower().startswith("json"):
                 cleaned = cleaned[4:].strip()
-            first_token = cleaned.split()[-1].lower().strip(".,;:!?") if cleaned.split() else ""
-            decision = None
-            if first_token == "retrieve":
-                decision = "retrieve"
-            elif first_token == "generate":
-                decision = "generate"
-            if os.getenv("ROUTER_DEBUG") == "1":
-                import sys
-
-                print(
-                    f"[router] q={question[:40]!r} | first_token={first_token!r} | decision={decision}",
-                    file=sys.stderr,
-                )
-            if decision:
-                return decision
+            decision = RouteDecision.model_validate_json(cleaned)
+            if decision.mode == "weather" and not decision.weather_location.strip():
+                decision.mode = "generate"
+            return decision
     except Exception as e:
         if os.getenv("ROUTER_DEBUG") == "1":
             import sys
 
             print(f"[router] error: {e!r}", file=sys.stderr)
-    return "retrieve"  # 兜底：默认尝试检索
+    return RouteDecision(reason="Router 不可用或输出异常，直接检索兜底")
 
 
 def route(state: ChatState) -> dict:
-    mode = _judge_route(state["question"])
-    weather_location = ""
-    if mode == "weather":
-        # _judge_route 已确认城市可提取；这里取一次存入 state，
-        # 供 weather_node 直接复用，避免节点内二次提取。
-        try:
-            from backend.rag.rag_pipeline import _get_router_model
-
-            router = _get_router_model()
-        except Exception:
-            router = None
-        weather_location = _extract_location(state["question"], router)
-    return {"mode": mode, "phase": mode, "weather_location": weather_location}
+    history = state.get("history")
+    decision = _judge_route(state["question"], history=history) if history else _judge_route(state["question"])
+    # 兼容只指定聊天分支的注入函数。
+    if isinstance(decision, str):
+        decision = RouteDecision(mode=decision)
+    return {
+        "mode": decision.mode,
+        "phase": decision.mode,
+        "weather_location": decision.weather_location.strip(),
+        "query_plan": QueryPlanResult.model_validate(decision.model_dump()).model_dump(),
+    }
 
 
 def _history_to_messages(history: list[dict]):
@@ -204,7 +199,7 @@ def retrieve(state: ChatState) -> dict:
     writer = get_stream_writer()
     step = {"icon": "🔍", "label": "正在检索知识库...", "detail": f"查询: {state['question'][:50]}"}
     writer({"type": "rag_step", "step": step})
-    result = run_rag_graph(state["question"])
+    result = run_rag_graph(state["question"], history=state.get("history"), query_plan=state.get("query_plan"))
     docs = result.get("docs", []) if isinstance(result, dict) else []
     trace = normalize_rag_trace(result.get("rag_trace") if isinstance(result, dict) else None)
     writer({"type": "rag_step", "step": {"icon": "✅", "label": f"检索完成，找到 {len(docs)} 个片段"}})
@@ -253,6 +248,7 @@ def _make_check_hitl(detect_fn: Callable):
         return {
             "answers": answers,
             "question": compose_question(state["original_question"], answers),
+            "query_plan": QueryPlanResult(reason="用户补充后，使用完整问题重新检索").model_dump(),
             "phase": "retrieve",
             "rag_trace": trace,
         }

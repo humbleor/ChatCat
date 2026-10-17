@@ -109,12 +109,42 @@ class StrategyResult(BaseModel):
     reason: str = Field(default="", description="选择理由（一句话）")
 
 
+class QueryPlanResult(BaseModel):
+    """检索前路由：直接检索，或选择一种查询扩展策略。"""
+
+    strategy: Literal["direct", "step_back", "hyde", "complex"] = Field(
+        default="direct",
+        description="direct=原问题足够清楚；step_back/hyde=改写扩展；complex=拆分并行检索",
+    )
+    query: str = Field(default="", description="仅在消解上下文指代时，改写成独立完整的问题")
+    reason: str = Field(default="", description="选择理由（一句话）")
+
+
+QUERY_PLAN_INSTRUCTIONS = (
+    "检索策略选择：\n"
+    "- direct：普通、具体、含义明确的问题，直接用原问题检索（首选，避免无谓改写）。\n"
+    "- step_back：问题过度依赖专有名词/细节，先生成更一般的原理问题辅助检索。\n"
+    "- hyde：问题较模糊或概念性，但目标仍可判断，生成假设性答案辅助检索。\n"
+    "- complex：比较或列举多个不同实体/主题，且这些目标很可能需要分别寻找证据。\n"
+    "仅仅询问同一篇论文、同一系统或同一对象的多个方面时，选 direct，避免无谓拆分。\n"
+    "如果问题缺少无法推断的关键条件，不要猜测或靠改写补造信息，选择 direct，"
+    "后续流程会判断是否需要向用户澄清。\n"
+    "如果用户问题有‘它/这个/上述/该方法’等上下文指代，且最近对话能明确指向对象，"
+    "请把 query 改写成包含明确对象的独立问题；否则 query 留空。\n"
+)
+
+
 class RAGState(TypedDict):
     question: str
+    original_question: str
+    history: List[dict]
+    query_plan: Optional[dict]
     query: str
     context: str
     docs: List[dict]
     route: Optional[str]
+    plan_route: Optional[str]
+    planned_strategy: Optional[str]
     expansion_type: Optional[str]
     expanded_query: Optional[str]
     step_back_question: Optional[str]
@@ -123,6 +153,71 @@ class RAGState(TypedDict):
     sub_questions: Optional[List[str]]
     sub_results: Annotated[dict[str, dict], _merge_sub_results]
     rag_trace: Optional[dict]
+
+
+def plan_query_node(state: RAGState) -> RAGState:
+    """优先执行聊天 route 已给出的规划；独立调用 RAG 时才调用规划模型。"""
+    question = state["question"]
+    strategy = "direct"
+    planned_query = question
+    reason = "Router 未配置，安全地直接检索"
+    try:
+        supplied_plan = state.get("query_plan")
+        if supplied_plan is not None:
+            result = QueryPlanResult.model_validate(supplied_plan)
+        else:
+            router = _get_router_model()
+            if router is None:
+                result = QueryPlanResult(reason=reason)
+            else:
+                prompt = (
+                    "你是知识库检索前的查询规划器。\n"
+                    + QUERY_PLAN_INSTRUCTIONS
+                    + '严格输出 JSON：{"strategy":"direct|step_back|hyde|complex",'
+                    '"query":"可选的独立问题","reason":"一句话理由"}。\n'
+                    + _format_query_history(state.get("history"))
+                    + f"用户问题：{question}"
+                )
+                raw = invoke_model(router, [{"role": "user", "content": prompt}]).content or ""
+                result = QueryPlanResult.model_validate_json(strip_think(raw))
+        strategy, reason = result.strategy, result.reason
+        planned_query = result.query.strip() or question
+    except Exception as exc:
+        reason = f"Router 异常，直接检索兜底 ({type(exc).__name__})"
+
+    plan_route = "retrieve_initial" if strategy == "direct" else "rewrite_question"
+    emit_rag_step(
+        "🧭",
+        "查询规划：直接检索" if strategy == "direct" else f"查询规划：{strategy}",
+        reason,
+    )
+    trace = dict(state.get("rag_trace") or {})
+    trace.update(
+        {
+            "query_plan": strategy,
+            "query_plan_reason": reason,
+            "original_question": state.get("original_question") or question,
+            "query": planned_query,
+        }
+    )
+    return {
+        "question": planned_query,
+        "plan_route": plan_route,
+        "planned_strategy": strategy,
+        "rag_trace": trace,
+    }
+
+
+def _format_query_history(history: list[dict] | None) -> str:
+    if not history:
+        return ""
+    lines = []
+    for item in history[-6:]:
+        role = "用户" if item.get("role") == "user" else "助手"
+        content = str(item.get("content") or "").strip()
+        if content:
+            lines.append(f"{role}：{content[:200]}")
+    return "最近对话（仅用于解析指代）：\n" + "\n".join(lines) + "\n\n" if lines else ""
 
 
 class SubtaskState(TypedDict):
@@ -166,30 +261,34 @@ def retrieve_initial(state: RAGState) -> RAGState:
     emit_rag_step(
         "✅", f"检索完成，找到 {len(results)} 个片段", f"模式: {retrieve_meta.get('retrieval_mode', 'hybrid')}"
     )
-    rag_trace = {
-        "tool_used": True,
-        "tool_name": "search_knowledge_base",
-        "query": query,
-        "expanded_query": query,
-        "retrieved_chunks": results,
-        "initial_retrieved_chunks": results,
-        "retrieval_stage": "initial",
-        "rerank_enabled": retrieve_meta.get("rerank_enabled"),
-        "rerank_applied": retrieve_meta.get("rerank_applied"),
-        "rerank_provider": retrieve_meta.get("rerank_provider"),
-        "rerank_model": retrieve_meta.get("rerank_model"),
-        "rerank_endpoint": retrieve_meta.get("rerank_endpoint"),
-        "rerank_error": retrieve_meta.get("rerank_error"),
-        "rerank_latency_ms": retrieve_meta.get("rerank_latency_ms"),
-        "retrieval_mode": retrieve_meta.get("retrieval_mode"),
-        "candidate_k": retrieve_meta.get("candidate_k"),
-        "leaf_retrieve_level": retrieve_meta.get("leaf_retrieve_level"),
-        "auto_merge_enabled": retrieve_meta.get("auto_merge_enabled"),
-        "auto_merge_applied": retrieve_meta.get("auto_merge_applied"),
-        "auto_merge_threshold": retrieve_meta.get("auto_merge_threshold"),
-        "auto_merge_replaced_chunks": retrieve_meta.get("auto_merge_replaced_chunks"),
-        "auto_merge_steps": retrieve_meta.get("auto_merge_steps"),
-    }
+    rag_trace = dict(state.get("rag_trace") or {})
+    rag_trace.update(
+        {
+            "tool_used": True,
+            "tool_name": "search_knowledge_base",
+            "query": query,
+            "expanded_query": query,
+            "retrieved_chunks": results,
+            "initial_retrieved_chunks": results,
+            "retrieval_stage": "initial",
+            "rerank_enabled": retrieve_meta.get("rerank_enabled"),
+            "rerank_applied": retrieve_meta.get("rerank_applied"),
+            "rerank_provider": retrieve_meta.get("rerank_provider"),
+            "rerank_model": retrieve_meta.get("rerank_model"),
+            "rerank_endpoint": retrieve_meta.get("rerank_endpoint"),
+            "rerank_error": retrieve_meta.get("rerank_error"),
+            "rerank_latency_ms": retrieve_meta.get("rerank_latency_ms"),
+            "retrieval_mode": retrieve_meta.get("retrieval_mode"),
+            "candidate_k": retrieve_meta.get("candidate_k"),
+            "leaf_retrieve_level": retrieve_meta.get("leaf_retrieve_level"),
+            "auto_merge_enabled": retrieve_meta.get("auto_merge_enabled"),
+            "auto_merge_applied": retrieve_meta.get("auto_merge_applied"),
+            "auto_merge_threshold": retrieve_meta.get("auto_merge_threshold"),
+            "auto_merge_replaced_chunks": retrieve_meta.get("auto_merge_replaced_chunks"),
+            "auto_merge_steps": retrieve_meta.get("auto_merge_steps"),
+            "retrieval_calls": int(rag_trace.get("retrieval_calls") or 0) + 1,
+        }
+    )
     return {
         "query": query,
         "docs": results,
@@ -261,7 +360,12 @@ def grade_documents_node(state: RAGState) -> RAGState:
             "evidence_reason": reason,
         }
     )
-    return {"route": route, "sub_questions": planned_sub_questions, "rag_trace": rag_trace}
+    return {
+        "route": route,
+        "sub_questions": planned_sub_questions,
+        "planned_strategy": None if route == "rewrite_question" else state.get("planned_strategy"),
+        "rag_trace": rag_trace,
+    }
 
 
 def rewrite_question_node(state: RAGState) -> RAGState:
@@ -269,9 +373,9 @@ def rewrite_question_node(state: RAGState) -> RAGState:
     emit_rag_step("✏️", "正在重写查询...")
     router = _get_router_model()
     planned_sub_questions = state.get("sub_questions") or []
-    strategy = "complex" if len(planned_sub_questions) > 1 else "step_back"
+    strategy = state.get("planned_strategy") or ("complex" if len(planned_sub_questions) > 1 else "step_back")
     strategy_reason = "比较题已拆分为多个独立子问题" if len(planned_sub_questions) > 1 else ""
-    if router and not planned_sub_questions:
+    if router and not state.get("planned_strategy") and not planned_sub_questions:
         prompt = (
             "请根据用户问题选择最合适的查询扩展策略。\n"
             "- step_back：包含具体名称、日期、代码等细节，需要先理解通用概念的问题。\n"
@@ -480,6 +584,7 @@ def retrieve_expanded(state: RAGState) -> RAGState:
             "auto_merge_replaced_chunks": auto_merge_replaced_chunks,
             "auto_merge_steps": auto_merge_steps,
             "synthesis_merged_count": len(deduped),
+            "retrieval_calls": int(rag_trace.get("retrieval_calls") or 0) + 1,
         }
     )
     return {"docs": deduped, "context": context, "rag_trace": rag_trace}
@@ -575,6 +680,7 @@ def synthesize_subquestions(state: RAGState) -> dict:
             "synthesis_merged_count": len(merged),
             "retrieval_empty": not merged,
             "retrieval_mode": "parallel_subquestions",
+            "retrieval_calls": int(trace.get("retrieval_calls") or 0) + len(questions),
             "rerank_enabled": any(bool(meta.get("rerank_enabled")) for meta in metas),
             "rerank_applied": any(bool(meta.get("rerank_applied")) for meta in metas),
             "rerank_provider": next((meta["rerank_provider"] for meta in metas if meta.get("rerank_provider")), None),
@@ -610,6 +716,7 @@ def synthesize_subquestions(state: RAGState) -> dict:
 
 def build_rag_graph():
     graph = StateGraph(RAGState)
+    graph.add_node("plan_query", cancellable_node(plan_query_node))
     graph.add_node("retrieve_initial", cancellable_node(retrieve_initial))
     graph.add_node("grade_documents", cancellable_node(grade_documents_node))
     graph.add_node("rewrite_question", cancellable_node(rewrite_question_node))
@@ -617,7 +724,12 @@ def build_rag_graph():
     graph.add_node("retrieve_subquestion", cancellable_node(retrieve_subquestion))
     graph.add_node("synthesize_subquestions", cancellable_node(synthesize_subquestions))
 
-    graph.set_entry_point("retrieve_initial")
+    graph.set_entry_point("plan_query")
+    graph.add_conditional_edges(
+        "plan_query",
+        lambda state: state.get("plan_route", "retrieve_initial"),
+        {"retrieve_initial": "retrieve_initial", "rewrite_question": "rewrite_question"},
+    )
     graph.add_edge("retrieve_initial", "grade_documents")
     graph.add_conditional_edges(
         "grade_documents",
@@ -637,14 +749,19 @@ def build_rag_graph():
 rag_graph = build_rag_graph()
 
 
-def run_rag_graph(question: str) -> dict:
+def run_rag_graph(question: str, history: list[dict] | None = None, query_plan: dict | None = None) -> dict:
     return rag_graph.invoke(
         {
             "question": question,
+            "original_question": question,
+            "history": history or [],
+            "query_plan": query_plan,
             "query": question,
             "context": "",
             "docs": [],
             "route": None,
+            "plan_route": None,
+            "planned_strategy": None,
             "expansion_type": None,
             "expanded_query": None,
             "step_back_question": None,
